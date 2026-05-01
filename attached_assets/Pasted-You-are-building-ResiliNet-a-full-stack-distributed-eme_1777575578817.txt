@@ -1,0 +1,335 @@
+You are building ResiliNet — a full-stack distributed emergency response coordinator for Islamabad, Pakistan. Follow every instruction below exactly.
+
+═══════════════════════════════════════════════
+SECTION 0 — UI DESIGN REFERENCE & OVERRIDES
+═══════════════════════════════════════════════
+
+The UI must match this aesthetic: dark navy/deep space dashboard with a glowing, glassmorphism card style. Reference design uses:
+* Deep navy background: #0A0F1E
+* Glowing card surfaces with subtle colored borders
+* A large central interactive map (NOT a world globe — Leaflet map of Islamabad only)
+* Stats/metrics panels on both sides of the map
+* Purple/blue/teal neon accent glows on cards
+* Grid-based layout filling the full viewport — no scrolling on dashboard
+
+The dashboard must look like a premium dark-mode emergency command center. Think: glowing borders, gradient stat cards, pulsing live indicators, smooth animations.
+
+DO NOT render a world map or globe. The ONLY map used anywhere in this app is a Leaflet.js interactive map centered on Islamabad [33.6844, 73.0479] at zoom 12. This same Islamabad map appears on the Dashboard, the /map page, and all three portal dashboards (Hospital, Ambulance, Police).
+
+═══════════════════════════════════════════════
+SECTION 1 — ROLE-BASED PORTAL SYSTEM (NEW)
+═══════════════════════════════════════════════
+
+Implement a login screen BEFORE the main app loads. The login screen must:
+* Have the ResiliNet logo/name centered
+* Show a single username field and a password field (password: "resilinet2026" for all)
+* Detect the portal type from the username suffix:
+    • Username contains "@hospital"  → loads Hospital Portal dashboard
+    • Username contains "@ambulance" → loads Ambulance Portal dashboard  
+    • Username contains "@police"    → loads Police Portal dashboard
+    • Any other username             → shows error: "Invalid portal credentials"
+* Store the detected role and username in React context (AuthContext)
+* After login, redirect to the role-specific dashboard automatically
+* Show the role badge (e.g. "🏥 Hospital Portal") in the TopBar after login
+* Add a logout button in TopBar that clears auth and returns to login screen
+
+Each role sees a DIFFERENT dashboard layout:
+
+HOSPITAL DASHBOARD (/dashboard — if @hospital):
+  - Title: "Hospital Operations Center"
+  - Accent color: #2563EB (blue)
+  - Left panel: Available Beds, ICU Status, Blood Stock levels, Accepting Cases toggle
+  - Center: Islamabad Leaflet map (hospital node marker highlighted, incident markers shown)
+  - Right panel: Active medical incidents queue, node online status cards
+  - Bottom stats row: Today's admissions, Critical cases, Ambulances inbound, Resolved today
+
+AMBULANCE DASHBOARD (/dashboard — if @ambulance):
+  - Title: "Dispatch & Coordination Center"
+  - Accent color: #14B8A6 (teal)
+  - Left panel: Unit availability (Available / On Duty / Total), Fuel status, GPS location display
+  - Center: Islamabad Leaflet map (ambulance unit location pulsing, incident markers shown)
+  - Right panel: Active dispatch queue, incidents assigned to this unit
+  - Bottom stats row: Active dispatches, Units available, Avg response time, Resolved today
+
+POLICE DASHBOARD (/dashboard — if @police):
+  - Title: "Police Operations & Command"
+  - Accent color: #8B5CF6 (purple)
+  - Left panel: Units available, On patrol, Patrol zone selector, Armed status
+  - Center: Islamabad Leaflet map (police station marker, patrol zone overlay highlighted)
+  - Right panel: Crime/incident log table, pending reports
+  - Bottom stats row: Active incidents, Units deployed, Zones covered, Resolved today
+
+The sidebar navigation must also adapt to role:
+  - @hospital sees: Dashboard, Live Map, Incidents, Hospital Portal, Analytics, Event Log
+  - @ambulance sees: Dashboard, Live Map, Incidents, Ambulance Portal, Analytics, Event Log
+  - @police sees: Dashboard, Live Map, Incidents, Police Portal, Analytics, Event Log
+
+═══════════════════════════════════════════════
+SECTION 2 — TECH STACK & PROJECT STRUCTURE
+═══════════════════════════════════════════════
+
+TECH STACK:
+  Backend  : Node.js 20 + Express.js 4
+  Realtime : Socket.IO 4
+  Broker   : Redis 7 (Pub/Sub via ioredis)
+  Database : MongoDB 7 + Mongoose 8
+  Frontend : React 18 + Vite
+  Styling  : Tailwind CSS 3 (dark theme)
+  Map      : Leaflet.js 1.9 + React-Leaflet 4 (Islamabad ONLY, no world map/globe)
+  Charts   : Recharts 2
+  Icons    : Lucide React
+  Routing  : React Router DOM 6
+  HTTP     : Axios
+  Auth     : React Context (AuthContext) — username-suffix based role detection
+  Env      : dotenv
+
+PROJECT STRUCTURE:
+resilinet/
+├── server/
+│   ├── hospital-node/index.js     (port 3001)
+│   ├── ambulance-node/index.js    (port 3002)
+│   ├── police-node/index.js       (port 3003)
+│   └── shared/
+│       ├── db.js
+│       ├── redis.js
+│       ├── heartbeat.js
+│       ├── seed.js
+│       └── models/ (Incident.js, Node.js, EventLog.js)
+├── client/src/
+│   ├── main.jsx
+│   ├── App.jsx
+│   ├── socket.js
+│   ├── context/
+│   │   └── AuthContext.jsx        (stores role, username, login/logout)
+│   ├── pages/
+│   │   ├── LoginPage.jsx          (NEW — username suffix detection)
+│   │   ├── Dashboard.jsx          (role-aware — renders HospitalDash / AmbulanceDash / PoliceDash)
+│   │   ├── HospitalDashboard.jsx  (NEW)
+│   │   ├── AmbulanceDashboard.jsx (NEW)
+│   │   ├── PoliceDashboard.jsx    (NEW)
+│   │   ├── MapPage.jsx
+│   │   ├── HospitalPortal.jsx
+│   │   ├── AmbulancePortal.jsx
+│   │   ├── PolicePortal.jsx
+│   │   ├── IncidentsPage.jsx
+│   │   ├── AnalyticsPage.jsx
+│   │   └── EventLogPage.jsx
+│   └── components/
+│       ├── Sidebar.jsx            (role-aware navigation)
+│       ├── TopBar.jsx             (shows role badge + logout)
+│       ├── IslamabadMap.jsx       (NEW — reusable Leaflet map component, Islamabad only)
+│       ├── NodeStatusCard.jsx
+│       ├── IncidentCard.jsx
+│       ├── MetricCard.jsx
+│       ├── AlertBanner.jsx
+│       ├── LiveClock.jsx
+│       └── SeverityBadge.jsx
+
+═══════════════════════════════════════════════
+SECTION 3 — ISLAMABAD MAP COMPONENT (SHARED)
+═══════════════════════════════════════════════
+
+Create a reusable IslamabadMap.jsx component used on ALL three role dashboards and the /map page.
+
+Map specs:
+  Center: [33.6844, 73.0479]
+  Default zoom: 12
+  Tile layer: OpenStreetMap
+  Height: configurable via prop (default: 100% of container)
+  Width: 100%
+
+The map always shows:
+  - Hospital node marker: blue cross icon (pulsing if online)
+  - Ambulance node marker: teal ambulance icon (with GPS pulse animation)
+  - Police node marker: purple shield icon
+  - Active critical incidents: red pulsing circle markers
+  - Active moderate incidents: amber circle markers
+  - Active low incidents: blue circle markers
+  - Resolved incidents: small gray circles
+
+On each role's dashboard, highlight THAT role's node marker with a larger glow ring.
+
+Pre-seeded Islamabad positions:
+  Hospital   : PIMS Hospital [33.7295, 73.0931]
+  Ambulance  : Rescue 1122 HQ [33.7094, 73.0551]
+  Police     : Islamabad Police HQ [33.7215, 73.0433]
+
+Incident locations:
+  Blue Area [33.7215, 73.0600], F-10 Markaz [33.6938, 73.0092],
+  G-9 Markaz [33.6938, 73.0433], Rawalpindi Saddar [33.5973, 73.0479],
+  Bahria Town [33.5553, 73.1076]
+
+Map updates in real time via Socket.IO — new incident markers appear instantly.
+Click any incident marker: popup with type, severity, description, status, node.
+Click any node marker: popup with name, badgeId, status, resources summary.
+
+On the Hospital dashboard: show a filter for "Medical incidents only" on the map.
+On the Ambulance dashboard: show the unit's live GPS position as a pulsing teal dot.
+On the Police dashboard: highlight the active patrol zone as a colored polygon overlay.
+
+═══════════════════════════════════════════════
+SECTION 4 — GLOBAL DESIGN SYSTEM
+═══════════════════════════════════════════════
+
+Theme: Dark glassmorphism command center aesthetic. Premium, glowing, alive.
+
+Colors:
+  Background:   #0A0F1E  (deep navy)
+  Surface:      #111827  (cards)
+  Surface-2:    #1F2937  (elevated cards/modals)
+  Border:       #374151
+  Primary:      #3B82F6  (blue)
+  Critical:     #EF4444  (red)
+  Warning:      #F59E0B  (amber)
+  Success:      #22C55E  (green)
+  Purple:       #8B5CF6  (police)
+  Teal:         #14B8A6  (ambulance)
+  Blue-600:     #2563EB  (hospital)
+  Text:         #F9FAFB
+  Text-muted:   #9CA3AF
+  Font:         Inter (Google Fonts)
+
+Card style: background rgba(17,24,39,0.8), border 1px solid rgba(55,65,81,0.5),
+            box-shadow with role-accent color glow (e.g. 0 0 20px rgba(37,99,235,0.15) for hospital)
+            backdrop-filter: blur(10px)
+
+Stat cards: gradient background from surface to slightly lighter, large bold number,
+            icon in top-right corner, subtle bottom border in accent color.
+
+Animations:
+  - .pulse-dot: scale pulse every 2s for live indicators
+  - .glow-red: red box-shadow pulse for critical alerts
+  - .slide-in-top: translateY(-20px) → 0 for new incident cards
+  - Smooth transitions: 150ms ease on all interactive elements
+  - Map markers for online nodes: gentle opacity pulse
+
+TopBar: fixed top, full width, dark blur background
+  Left: ResiliNet logo + current page title
+  Center: 3 node badges (HOS/AMB/POL) with green/red status dots
+  Right: role badge pill (e.g. "🏥 Hospital"), LiveClock 24h, active incidents count, logout button
+
+Sidebar: fixed left, 64px collapsed, 220px expanded on hover
+  Shows role-appropriate nav items with Lucide icons
+  Bottom: 3 node connection status dots
+
+═══════════════════════════════════════════════
+SECTIONS 5–17: IMPLEMENT FULLY AS SPECIFIED
+═══════════════════════════════════════════════
+
+Now implement ALL of the following sections completely. Do not use placeholder content or TODO comments. Every page, every API endpoint, every feature must be fully built.
+
+--- DATABASE SCHEMAS ---
+Build all three Mongoose models exactly as specified:
+  Incident.js (incidentType, severity, status, location, description, reportedBy, assignedUnits, updates)
+  Node.js (nodeType, nodeName, badgeId, status, location, resources, lastHeartbeat)
+  EventLog.js (eventType, sourceNode, relatedIncident, payload, timestamp)
+
+--- BACKEND NODE SERVERS ---
+Build hospital-node (port 3001), ambulance-node (port 3002), police-node (port 3003).
+All identical architecture. Each:
+  - Connects to MongoDB + Redis on startup
+  - Registers itself with auto-generated badgeId (HOS-XXXX / AMB-XXXX / POL-XXXX)
+  - Publishes heartbeat every 3s, detects offline nodes after 9s
+  - Exposes full REST API: /api/health, /api/incidents (CRUD), /api/nodes, /api/events, /api/analytics
+  - Emits Socket.IO events: incident:new, incident:updated, node:online/offline/recovered, resource:updated, alert:critical, heartbeat:all
+  - Redis channels: ALL_NODES, INCIDENTS, HEARTBEAT
+
+--- PAGES TO BUILD (all fully functional) ---
+
+1. LoginPage — username suffix detection (@hospital/@ambulance/@police), password field, error state
+2. Role-aware Dashboard — renders HospitalDashboard, AmbulanceDashboard, or PoliceDashboard based on auth role
+3. HospitalDashboard — blue accent, beds/ICU/blood stats left, IslamabadMap center, incidents right
+4. AmbulanceDashboard — teal accent, unit/GPS stats left, IslamabadMap center, dispatch queue right
+5. PoliceDashboard — purple accent, unit/zone stats left, IslamabadMap center, crime log right
+6. MapPage (/map) — full-page IslamabadMap with floating overlay panels, filters, heatmap toggle
+7. HospitalPortal (/hospital) — registration form + resource management + incident queue
+8. AmbulancePortal (/ambulance) — registration + live dispatch panel + GPS simulation
+9. PolicePortal (/police) — badge registration + operations dashboard + crime log table
+10. IncidentsPage (/incidents) — cards/table view, filters, side panel detail, export CSV
+11. AnalyticsPage (/analytics) — 5 metric cards, bar chart, donut chart, timeline, node table
+12. EventLogPage (/events) — real-time log, filter by type, animated new entries
+
+--- ADDITIONAL FEATURES (all 10 required) ---
+1. Browser notification API for critical incidents
+2. Incident priority queue (critical → moderate → low → resolved)
+3. Dark/light mode toggle (persisted in localStorage)
+4. Node simulation panel (kill/recover node, spawn incident, stress test)
+5. Export CSV (incidents, event log) and PDF (analytics)
+6. Cmd+K command palette (search incidents, nodes, events)
+7. Leaflet heatmap layer toggle on map page (use leaflet.heat from CDN)
+8. Node uptime tracker (24h timeline bar in analytics)
+9. Resource alerts (low beds, zero ambulances, low police units)
+10. Incident resolution workflow with outcome, resolution note, confetti animation
+
+--- DEMO SEED DATA ---
+Run: node server/shared/seed.js
+Seeds: 3 nodes (PIMS Hospital, Rescue 1122, Islamabad Police G-9), 8 incidents across Islamabad, 20 event log entries.
+
+--- REAL-TIME CLIENT ---
+socket.js: THREE Socket.IO connections (hospital:3001, ambulance:3002, police:3003)
+useRealtime() hook: listens all three sockets, maintains global incidents/nodes/events state, triggers alerts.
+
+--- REPLIT CONFIG ---
+Root package.json scripts:
+  "dev": "concurrently hospital ambulance police client"
+  "seed": "node server/shared/seed.js"
+.replit: run = 'npm run dev', nix channel stable-24_05
+Redis: start with "redis-server --daemonize yes" before servers
+MongoDB: use MongoDB Atlas free tier (MONGO_URI in .env)
+Expose port 5173 as the main web port.
+
+--- FINAL QUALITY BAR ---
+* App must look EXCELLENT on first load with seeded data
+* Dashboard must feel alive: pulsing dots, animated stats, real-time feed
+* Each role dashboard must feel DISTINCT in color, layout, and data shown
+* IslamabadMap must load instantly with all node + incident markers
+* Full end-to-end flow must work: login → dashboard → create incident → see on map → update status → resolve
+* All forms: react-hot-toast for success/error, skeleton loaders while fetching
+* No unused imports, no TODO comments, no placeholder text
+* README.md: setup, seed, env vars, features list     ═══════════════════════════════════════════════
+SECTION 18 — DISTRIBUTED CONCEPTS VISUAL PANEL
+═══════════════════════════════════════════════
+
+Add a "PDC Concepts" page at /concepts accessible from the sidebar (all roles).
+This page visually demonstrates all 5 distributed systems concepts with live animations.
+
+CONCEPT 1 — HEARTBEAT HEALTH CHECKS:
+  Show all 3 node cards with a live "last heartbeat" counter ticking up in real time.
+  Each node has a history strip of 14 colored ticks (green=received, red=missed).
+  When elapsed time > 9s, node card border turns red and status badge shows "offline".
+  Include a simulation button to pause/resume heartbeats per node.
+  Label: "Each node publishes to Redis every 4s. Offline threshold: 9s."
+
+CONCEPT 2 — EVENT-DRIVEN MESSAGING:
+  Visualize 3 producer nodes → EventEmitter/Redis bus → all subscribers.
+  Show a live message stream panel. Firing an event animates a "broadcasting" flash
+  on the bus box, then shows the event appearing in all subscriber feeds.
+  Display the Redis channel names: ALL_NODES, INCIDENTS, HEARTBEAT.
+  Label: "EventEmitter pub/sub bus broadcasts to Socket.IO, which pushes to all clients."
+
+CONCEPT 3 — FAULT TOLERANCE SIMULATION:
+  Show 3 node cards with incident-handled counters and progress bars.
+  "Kill Node" button sets status to offline and triggers rerouting animation —
+  a visible arrow showing incidents being redirected to surviving nodes.
+  "Recover Node" brings it back and emits NODE_RECOVERED event.
+  Show a live fault log with color-coded entries (red=kill, green=recover, amber=reroute).
+  Label: "Kill/recover nodes via SimulationPanel. UI updates in real time. Zero data loss."
+
+CONCEPT 4 — STATE SYNCHRONIZATION:
+  Show two panels side by side: server state (MongoDB) and new client.
+  "Add Incident" button updates server state. "Connect Client" button triggers
+  a visible init:state push — the client panel populates with full current state.
+  Show a sync log confirming what was sent and when.
+  Label: "init:state event pushes full state to newly connected clients."
+
+CONCEPT 5 — DISTRIBUTED LOGGING:
+  Show a filterable, real-time event log table.
+  Columns: timestamp, source node (colored badge), event type, payload summary.
+  Buttons to fire sample events of each type: INCIDENT_CREATED, NODE_OFFLINE,
+  NODE_RECOVERED, STATUS_UPDATED, UNIT_ASSIGNED, FAILOVER.
+  Color-code by event type. New entries slide in from top.
+  Label: "Event log records every state change with timestamp and source node."
+
+All 5 concepts must be shown on the same page using a tabbed interface.
+Each tab has a one-line explanation of the PDC concept at the bottom.
+This page should be clearly labeled as "CS-347 PDC Concepts Demo" in the header.

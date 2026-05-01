@@ -1,0 +1,68 @@
+Redesign the entire frontend visual theme to match a premium dark space/cyberpunk aesthetic. Do NOT change any functionality or logic — only update CSS, colors, and visual styling.
+
+BACKGROUND & SURFACES:
+- Page background: deep navy #050818 (almost black with blue tint)
+- Card background: rgba(13, 8, 35, 0.85) with backdrop-filter: blur(12px)
+- Cards must have a glowing border: 1px solid rgba(139, 92, 246, 0.3) 
+- Add box-shadow to every card: 0 0 20px rgba(139, 92, 246, 0.08), 0 0 40px rgba(59, 130, 246, 0.05)
+- Sidebar background: rgba(5, 4, 20, 0.95) with right border: 1px solid rgba(139, 92, 246, 0.2)
+
+GLOW EFFECTS (this is the most important part — makes it look alive):
+- Hospital accent cards: box-shadow: 0 0 25px rgba(37, 99, 235, 0.25), border-color: rgba(37, 99, 235, 0.4)
+- Ambulance accent cards: box-shadow: 0 0 25px rgba(20, 184, 166, 0.25), border-color: rgba(20, 184, 166, 0.4)
+- Police accent cards: box-shadow: 0 0 25px rgba(139, 92, 246, 0.25), border-color: rgba(139, 92, 246, 0.4)
+- Critical alerts: box-shadow: 0 0 30px rgba(239, 68, 68, 0.4), border-color: rgba(239, 68, 68, 0.6)
+- Online status dots must glow: box-shadow: 0 0 8px currentColor
+
+STAT/METRIC CARDS:
+- Big numbers must use a gradient text effect: background: linear-gradient(135deg, #fff 0%, #a78bfa 100%); -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+- Each metric card needs a very subtle gradient background: linear-gradient(135deg, rgba(139,92,246,0.08) 0%, rgba(59,130,246,0.04) 100%)
+- Add a thin top border accent line in the node's accent color (3px, gradient from accent to transparent)
+
+TOPBAR:
+- Background: rgba(5, 4, 20, 0.9) with backdrop-filter: blur(20px)
+- Bottom border: 1px solid rgba(139, 92, 246, 0.2)
+- Node badges (HOS/AMB/POL): pill shape with glowing dot, gradient border
+- Critical alert badge: pulsing red glow animation — @keyframes criticalPulse { 0%,100%{box-shadow: 0 0 10px rgba(239,68,68,0.5)} 50%{box-shadow: 0 0 25px rgba(239,68,68,0.9)} }
+
+MAP CONTAINER:
+- Wrap the Leaflet map in a container with: border: 1px solid rgba(139, 92, 246, 0.25), box-shadow: inset 0 0 60px rgba(5, 4, 20, 0.4), border-radius: 12px
+- Use a dark map tile (CartoDB dark matter): https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png
+- Map attribution: © OpenStreetMap contributors © CARTO
+- Incident markers must pulse with a glowing ring animation using CSS keyframes
+- Node markers should have a colored glow matching their accent
+
+ANIMATIONS (make it feel alive):
+- Add this global pulse animation for live indicators:
+  @keyframes livePulse { 0%,100%{opacity:1;transform:scale(1)} 50%{opacity:0.7;transform:scale(1.4)} }
+- Metric card numbers: when they update, briefly flash with a glow (transition: text-shadow 0.3s)
+- New incident cards: slide in from top with opacity 0→1 and translateY(-12px)→0 over 300ms
+- Sidebar icons: on hover, add a colored glow matching the page accent color
+- Add a very subtle scanline texture overlay on the background using:
+  background-image: repeating-linear-gradient(0deg, rgba(139,92,246,0.015) 0px, transparent 1px, transparent 3px)
+
+TYPOGRAPHY:
+- Import and use: @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&display=swap')
+- All headings: font-weight: 500, letter-spacing: -0.02em
+- Muted labels: color: rgba(156, 163, 175, 0.7), font-size: 11px, letter-spacing: 0.08em, text-transform: uppercase
+- Large stat numbers: font-size: 2rem, font-weight: 600
+
+PROGRESS BARS & GAUGES:
+- Track background: rgba(255,255,255,0.06)
+- Fill: linear-gradient(90deg, accent-color, lighter-accent) with box-shadow: 0 0 8px accent-color
+- Border radius: 999px (pill shape)
+- Height: 5px (thin and elegant)
+
+BLOOD STOCK BARS specifically:
+- O+ bar: linear-gradient(90deg, #ef4444, #f87171) with red glow
+- A+ bar: linear-gradient(90deg, #3b82f6, #60a5fa) with blue glow  
+- B+ bar: linear-gradient(90deg, #22c55e, #4ade80) with green glow
+- AB+ bar: linear-gradient(90deg, #a855f7, #c084fc) with purple glow
+
+INCIDENT CARDS in the queue:
+- Left border: 3px solid accent color (red=critical, amber=moderate, blue=low)
+- Background: rgba(255,255,255,0.03) on hover: rgba(255,255,255,0.06)
+- Severity badge: glowing pill — critical gets red glow, moderate gets amber glow
+- Smooth hover transition: transform: translateX(2px), box-shadow increase
+
+Make every element feel premium and intentional. The goal is: someone looks at this dashboard and immediately thinks "this is a real emergency command system", not a student project. Apply all of these changes across ALL pages and ALL three portal dashboards consistently.

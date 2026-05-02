@@ -1,0 +1,140 @@
+This project is currently a UI mockup. I need you to convert it into a real distributed system. Read the existing code carefully before making changes. Here is exactly what to build:
+STEP 1 — Install packages
+In the project root run:
+npm install socket.io socket.io-client
+STEP 2 — Create server.js in the project root
+javascriptconst express = require('express');
+const http = require('http');
+const { Server } = require('socket.io');
+
+const app = express();
+const server = http.createServer(app);
+const io = new Server(server, { cors: { origin: '*' } });
+
+let incidents = [];
+let nodeHeartbeats = {};
+
+io.on('connection', (socket) => {
+  console.log('Client connected:', socket.id);
+  socket.emit('init', incidents);
+
+  socket.on('add-incident', (incident) => {
+    incidents.push(incident);
+    io.emit('add-incident', incident);
+    console.log('Incident broadcast:', incident.id);
+  });
+
+  socket.on('resolve-incident', (id) => {
+    incidents = incidents.map(i => i.id === id ? { ...i, status: 'resolved' } : i);
+    io.emit('resolve-incident', id);
+  });
+
+  socket.on('heartbeat', ({ name }) => {
+    nodeHeartbeats[name] = Date.now();
+    io.emit('node-online', { name });
+  });
+
+  socket.on('disconnect', () => {
+    console.log('Client disconnected:', socket.id);
+  });
+});
+
+setInterval(() => {
+  const now = Date.now();
+  Object.keys(nodeHeartbeats).forEach((name) => {
+    if (now - nodeHeartbeats[name] > 5000) {
+      console.log(`Node offline: ${name}`);
+      io.emit('node-offline', { name });
+      delete nodeHeartbeats[name];
+    }
+  });
+}, 3000);
+
+server.listen(3001, () => console.log('Hub server running on port 3001'));
+STEP 3 — Create node-client.js in the project root
+javascriptconst { io } = require('socket.io-client');
+
+const nodeName = process.argv[2] || 'UnknownNode';
+const socket = io('http://localhost:3001');
+
+socket.on('connect', () => console.log(`${nodeName} connected to hub`));
+socket.on('disconnect', () => console.log(`${nodeName} disconnected`));
+
+setInterval(() => {
+  socket.emit('heartbeat', { name: nodeName, time: new Date().toISOString() });
+  console.log(`${nodeName} heartbeat sent`);
+}, 2000);
+STEP 4 — Modify artifacts/resilinet/src/context/ResiliNetContext.tsx
+Do the following surgical changes only — do not rewrite the whole file:
+
+At the very top of the file, add these two lines after the existing imports:
+
+typescriptimport { io } from 'socket.io-client';
+const socket = io('http://localhost:3001');
+
+Find the addIncident function. After the line that updates React state with setState(...), add:
+
+typescriptsocket.emit('add-incident', newIncident);
+
+Find the resolveIncident function. After the line that updates React state, add:
+
+typescriptsocket.emit('resolve-incident', id);
+
+Inside the ResiliNetProvider component, add this useEffect block (put it near the other useEffects):
+
+typescriptuseEffect(() => {
+  socket.on('init', (data: Incident[]) => {
+    setState(prev => ({ ...prev, incidents: data }));
+  });
+
+  socket.on('add-incident', (incident: Incident) => {
+    setState(prev => ({
+      ...prev,
+      incidents: [incident, ...prev.incidents.filter(i => i.id !== incident.id)]
+    }));
+  });
+
+  socket.on('resolve-incident', (id: string) => {
+    setState(prev => ({
+      ...prev,
+      incidents: prev.incidents.map(i => i.id === id ? { ...i, status: 'resolved' } : i)
+    }));
+  });
+
+  socket.on('node-offline', ({ name }: { name: string }) => {
+    setState(prev => ({
+      ...prev,
+      nodes: prev.nodes.map(n => n.name === name ? { ...n, status: 'offline' } : n)
+    }));
+  });
+
+  socket.on('node-online', ({ name }: { name: string }) => {
+    setState(prev => ({
+      ...prev,
+      nodes: prev.nodes.map(n => n.name === name ? { ...n, status: 'online', lastHeartbeat: Date.now() } : n)
+    }));
+  });
+
+  return () => {
+    socket.off('init');
+    socket.off('add-incident');
+    socket.off('resolve-incident');
+    socket.off('node-offline');
+    socket.off('node-online');
+  };
+}, []);
+STEP 5 — Remove localStorage
+In ResiliNetContext.tsx, find and delete these two things:
+
+Any line that does localStorage.setItem('resilinet_state', ...)
+Any line that does localStorage.getItem('resilinet_state')
+
+STEP 6 — Start the server
+Run node server.js and confirm it says "Hub server running on port 3001"
+STRICT RULES:
+
+Do NOT change any UI components, pages, or styles
+Do NOT rewrite ResiliNetContext.tsx from scratch — only add the socket code
+Do NOT change any TypeScript types or interfaces
+Do NOT touch any other files except the ones listed above
+Check whether the project uses ESM or CommonJS before writing import/require statements in server.js and node-client.js

@@ -1,6 +1,8 @@
 import React, { createContext, useContext, useState, useEffect, ReactNode, useCallback } from 'react';
 import { Node, Incident, AppEvent, EventType, IncidentStatus } from '../lib/types';
 import { SEED_NODES, SEED_INCIDENTS, SEED_EVENTS } from '../lib/seed';
+import { io } from 'socket.io-client';
+const socket = io('http://localhost:3001');
 
 interface ResiliNetState {
   nodes: Node[];
@@ -21,25 +23,11 @@ interface ResiliNetContextType extends ResiliNetState {
 const ResiliNetContext = createContext<ResiliNetContextType | undefined>(undefined);
 
 export function ResiliNetProvider({ children }: { children: ReactNode }) {
-  const [state, setState] = useState<ResiliNetState>(() => {
-    try {
-      const stored = localStorage.getItem('resilinet_state');
-      if (stored) {
-        const parsed = JSON.parse(stored);
-        // Basic validation
-        if (parsed.nodes && parsed.incidents && parsed.events) {
-          return parsed;
-        }
-      }
-    } catch (e) {
-      console.error('Failed to parse state from localStorage', e);
-    }
-    return { nodes: SEED_NODES, incidents: SEED_INCIDENTS, events: SEED_EVENTS };
+  const [state, setState] = useState<ResiliNetState>({
+    nodes: SEED_NODES,
+    incidents: SEED_INCIDENTS,
+    events: SEED_EVENTS
   });
-
-  useEffect(() => {
-    localStorage.setItem('resilinet_state', JSON.stringify(state));
-  }, [state]);
 
   const fireEvent = useCallback((type: EventType, message: string, nodeId?: string, incidentId?: string) => {
     const newEvent: AppEvent = {
@@ -60,6 +48,7 @@ export function ResiliNetProvider({ children }: { children: ReactNode }) {
       createdAt: Date.now()
     };
     setState(prev => ({ ...prev, incidents: [newIncident, ...prev.incidents] }));
+    socket.emit('add-incident', newIncident);
     fireEvent('INCIDENT_CREATED', `New ${newIncident.severity} ${newIncident.type} incident reported`, undefined, newIncident.id);
   }, [fireEvent]);
 
@@ -80,6 +69,7 @@ export function ResiliNetProvider({ children }: { children: ReactNode }) {
           : inc
       )
     }));
+    socket.emit('resolve-incident', id);
     fireEvent('STATUS_UPDATED', `Incident ${id} resolved`, undefined, id);
   }, [fireEvent]);
 
@@ -102,6 +92,49 @@ export function ResiliNetProvider({ children }: { children: ReactNode }) {
 
   const resetSimulation = useCallback(() => {
     setState({ nodes: SEED_NODES, incidents: SEED_INCIDENTS, events: SEED_EVENTS });
+  }, []);
+
+  // Socket.IO real-time sync
+  useEffect(() => {
+    socket.on('init', (data: Incident[]) => {
+      setState(prev => ({ ...prev, incidents: data }));
+    });
+
+    socket.on('add-incident', (incident: Incident) => {
+      setState(prev => ({
+        ...prev,
+        incidents: [incident, ...prev.incidents.filter(i => i.id !== incident.id)]
+      }));
+    });
+
+    socket.on('resolve-incident', (id: string) => {
+      setState(prev => ({
+        ...prev,
+        incidents: prev.incidents.map(i => i.id === id ? { ...i, status: 'resolved' } : i)
+      }));
+    });
+
+    socket.on('node-offline', ({ name }: { name: string }) => {
+      setState(prev => ({
+        ...prev,
+        nodes: prev.nodes.map(n => n.name === name ? { ...n, status: 'offline' } : n)
+      }));
+    });
+
+    socket.on('node-online', ({ name }: { name: string }) => {
+      setState(prev => ({
+        ...prev,
+        nodes: prev.nodes.map(n => n.name === name ? { ...n, status: 'online', lastHeartbeat: Date.now() } : n)
+      }));
+    });
+
+    return () => {
+      socket.off('init');
+      socket.off('add-incident');
+      socket.off('resolve-incident');
+      socket.off('node-offline');
+      socket.off('node-online');
+    };
   }, []);
 
   // Simulation loop

@@ -115,16 +115,34 @@ export function ResiliNetProvider({ children }: { children: ReactNode }) {
     });
 
     socket.on('node-offline', ({ name }: { name: string }) => {
+      const lowerName = name.toLowerCase();
       setState(prev => ({
         ...prev,
-        nodes: prev.nodes.map(n => n.name === name ? { ...n, status: 'offline' } : n)
+        nodes: prev.nodes.map(n =>
+          n.name === name ||
+          n.id === name ||
+          n.id.toLowerCase() === lowerName ||
+          n.name.toLowerCase() === lowerName ||
+          n.type.toLowerCase() === lowerName
+            ? { ...n, status: 'offline' }
+            : n
+        )
       }));
     });
 
     socket.on('node-online', ({ name }: { name: string }) => {
+      const lowerName = name.toLowerCase();
       setState(prev => ({
         ...prev,
-        nodes: prev.nodes.map(n => n.name === name ? { ...n, status: 'online', lastHeartbeat: Date.now() } : n)
+        nodes: prev.nodes.map(n =>
+          n.name === name ||
+          n.id === name ||
+          n.id.toLowerCase() === lowerName ||
+          n.name.toLowerCase() === lowerName ||
+          n.type.toLowerCase() === lowerName
+            ? { ...n, status: 'online', lastHeartbeat: Date.now() }
+            : n
+        )
       }));
     });
 

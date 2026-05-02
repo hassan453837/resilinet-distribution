@@ -8,23 +8,13 @@ import { Activity, ServerCrash, Share2, Database, ListOrdered, ArrowRight } from
 import { toast } from 'sonner';
 
 export default function ConceptsPage() {
-  const { nodes, killNode, recoverNode, fireEvent, addIncident } = useResiliNet();
+  const { nodes, fireEvent, addIncident } = useResiliNet();
   const [activeTab, setActiveTab] = useState('heartbeat');
 
   // Simulated internal state for demo tabs
   const [serverStateCount, setServerStateCount] = useState(0);
   const [clientSynced, setClientSynced] = useState(false);
   const [syncLogs, setSyncLogs] = useState<string[]>([]);
-
-  const handleKillNode = (id: string) => {
-    killNode(id);
-    toast.error(`Node ${id} terminated for fault tolerance demo.`);
-  };
-
-  const handleRecoverNode = (id: string) => {
-    recoverNode(id);
-    toast.success(`Node ${id} recovered.`);
-  };
 
   const handleAddIncidentToState = () => {
     setServerStateCount(prev => prev + 1);
@@ -94,13 +84,9 @@ export default function ConceptsPage() {
                             <div key={i} className={`h-4 w-1.5 rounded-full ${i > 10 && isOffline ? 'bg-red-500' : 'bg-green-500'}`} style={{ opacity: 0.3 + (i * 0.05) }} />
                           ))}
                         </div>
-                        <Button 
-                          variant={isOffline ? 'default' : 'destructive'} 
-                          className="w-full h-8 text-xs"
-                          onClick={() => isOffline ? handleRecoverNode(node.id) : handleKillNode(node.id)}
-                        >
-                          {isOffline ? 'Resume Heartbeat' : 'Pause Heartbeat (Simulate Failure)'}
-                        </Button>
+                        <div className={`w-full h-8 flex items-center justify-center text-xs rounded font-mono border ${isOffline ? 'border-red-500/30 text-red-400 bg-red-500/10' : 'border-green-500/30 text-green-400 bg-green-500/10'}`}>
+                          {isOffline ? 'Waiting for heartbeat…' : 'Heartbeat active'}
+                        </div>
                       </div>
                     </Card>
                   );
@@ -197,13 +183,9 @@ export default function ConceptsPage() {
                      <div className="w-full bg-background rounded-full h-2 overflow-hidden">
                        <div className={`h-full ${node.status === 'online' ? 'bg-primary' : 'bg-destructive'}`} style={{ width: node.status === 'online' ? '33%' : '0%' }}></div>
                      </div>
-                     <Button 
-                        variant={node.status === 'online' ? 'destructive' : 'default'} 
-                        size="sm"
-                        onClick={() => node.status === 'online' ? handleKillNode(node.id) : handleRecoverNode(node.id)}
-                      >
-                        {node.status === 'online' ? 'Simulate Crash' : 'Recover Node'}
-                      </Button>
+                      <div className={`px-3 py-1.5 rounded text-xs font-mono border ${node.status === 'online' ? 'border-green-500/30 text-green-400 bg-green-500/10' : 'border-red-500/30 text-red-400 bg-red-500/10'}`}>
+                        {node.status === 'online' ? '● Live' : '○ Offline'}
+                      </div>
                    </div>
                  ))}
               </div>

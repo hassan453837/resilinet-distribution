@@ -1,0 +1,12 @@
+{
+  "name": "@workspace/root",
+  "version": "0.0.0",
+  "private": true,
+  "scripts": {
+    "dev": "pnpm --filter @workspace/resilinet run dev",
+    "typecheck:libs": "pnpm --filter @workspace/api-client-react run typecheck && pnpm --filter @workspace/api-zod run typecheck"
+  },
+  "devDependencies": {
+    "typescript": "^5.8.3"
+  }
+}

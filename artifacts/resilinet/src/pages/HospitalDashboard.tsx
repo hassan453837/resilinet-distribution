@@ -4,6 +4,7 @@ import IslamabadMap from '../components/IslamabadMap';
 import { Switch } from '../components/ui/switch';
 import { Activity, Bed, Droplet, MapPin } from 'lucide-react';
 import { Node } from '../lib/types';
+import { useAuth } from '../context/AuthContext';
 
 const bloodBarClass: Record<string, string> = {
   'O+': 'bar-fill-red',
@@ -18,7 +19,8 @@ const bloodBarClass: Record<string, string> = {
 
 export default function HospitalDashboard() {
   const { nodes, incidents } = useResiliNet();
-  const hospitalNode = nodes.find(n => n.type === 'hospital') as Node;
+  const { user } = useAuth();
+  const hospitalNode = nodes.find(n => n.id === user?.node_id) as Node;
   const hospitalResources = hospitalNode?.resources.hospital;
 
   const medicalIncidents = incidents.filter(i => i.type === 'medical' && i.status !== 'resolved');

@@ -13,6 +13,7 @@ import { CommandPalette } from "./components/CommandPalette";
 
 import { Redirect } from "wouter";
 import LoginPage from "./pages/LoginPage";
+import SignupPage from "./pages/SignupPage";
 import Dashboard from "./pages/Dashboard";
 import { useAuth } from "./context/AuthContext";
 
@@ -36,6 +37,7 @@ function AppContent() {
     <>
       <Switch>
         <Route path="/login" component={LoginPage} />
+        <Route path="/signup" component={SignupPage} />
         <Route path="/" component={RootRedirect} />
 
         <Route path="/:rest*">

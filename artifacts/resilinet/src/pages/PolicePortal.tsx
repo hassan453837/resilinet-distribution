@@ -1,11 +1,13 @@
 import React from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/card';
 import { useResiliNet } from '../context/ResiliNetContext';
+import { useAuth } from '../context/AuthContext';
 import { Node } from '../lib/types';
 
 export default function PolicePortal() {
   const { nodes } = useResiliNet();
-  const policeNode = nodes.find(n => n.type === 'police') as Node;
+  const { user } = useAuth();
+  const policeNode = nodes.find(n => n.id === user?.node_id) as Node;
   
   if (!policeNode) return <div>Loading...</div>;
 

@@ -8,7 +8,7 @@ import { useLocation } from 'wouter';
 
 export function TopBar() {
   const { username, role, logout } = useAuth();
-  const { nodes, incidents } = useResiliNet();
+  const { incidents } = useResiliNet();
   const [location] = useLocation();
 
   const getPageTitle = () => {
@@ -35,12 +35,6 @@ export function TopBar() {
     }
   };
 
-  const nodeAccent = (type: string) => {
-    if (type === 'hospital') return { color: '#60a5fa', label: 'HOS' };
-    if (type === 'ambulance') return { color: '#5eead4', label: 'AMB' };
-    return { color: '#c4b5fd', label: 'POL' };
-  };
-
   const criticalCount = incidents.filter(i => i.severity === 'critical' && i.status !== 'resolved').length;
   const role_style = roleBadgeStyle();
 
@@ -58,22 +52,7 @@ export function TopBar() {
         <h1 className="text-xs font-medium tracking-[0.2em] uppercase text-muted-foreground">{getPageTitle()}</h1>
       </div>
 
-      <div className="flex flex-1 items-center justify-center gap-3 px-8">
-        {nodes.map(node => {
-          const a = nodeAccent(node.type);
-          const isOnline = node.status === 'online';
-          return (
-            <div key={node.id} className="node-pill" style={{ borderColor: `${a.color}55` }}>
-              <span
-                className="inline-block h-1.5 w-1.5 rounded-full live-pulse"
-                style={{ background: isOnline ? a.color : '#ef4444', boxShadow: `0 0 8px ${isOnline ? a.color : '#ef4444'}` }}
-              />
-              <span style={{ color: a.color }}>{a.label}</span>
-              <span className="text-muted-foreground/70">{node.id.split('-')[0]}</span>
-            </div>
-          );
-        })}
-      </div>
+      <div className="flex flex-1 items-center justify-center gap-3 px-8" />
 
       <div className="flex items-center gap-5">
         {criticalCount > 0 && (

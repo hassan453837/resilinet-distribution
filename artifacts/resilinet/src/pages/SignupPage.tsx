@@ -1,59 +1,90 @@
-import React, { useState } from 'react';
-import { Shield, AlertTriangle, Activity, Radio, Zap } from 'lucide-react';
+import React, { useEffect, useState } from 'react';
+import { Shield, AlertTriangle, Zap } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { useAuth } from '../context/AuthContext';
 import { toast } from 'sonner';
-import { Link } from 'wouter';
+import { Link, useLocation } from 'wouter';
 
-export default function LoginPage() {
+export default function SignupPage() {
+  const [, setLocation] = useLocation();
+  const [nodeId, setNodeId] = useState('');
+  const [nodes, setNodes] = useState<Array<{ id: string; name: string; type: string }>>([]);
+  const [nodesLoading, setNodesLoading] = useState(true);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const { login } = useAuth();
+  const [role, setRole] = useState('hospital');
 
-  const handleLogin = async (e: React.FormEvent) => {
+  useEffect(() => {
+    let isMounted = true;
+
+    const fetchNodes = async () => {
+      try {
+        const response = await fetch('http://localhost:3001/api/nodes');
+        const payload = await response.json();
+        if (!response.ok) {
+          throw new Error(payload?.error || 'Unable to load nodes.');
+        }
+        if (isMounted) {
+          setNodes(Array.isArray(payload?.nodes) ? payload.nodes : []);
+        }
+      } catch (err) {
+        console.error('Failed to load nodes:', err);
+        if (isMounted) {
+          toast.error('Unable to load nodes. Please try again.', {
+            icon: <AlertTriangle className="h-4 w-4 text-destructive" />
+          });
+        }
+      } finally {
+        if (isMounted) {
+          setNodesLoading(false);
+        }
+      }
+    };
+
+    fetchNodes();
+    return () => {
+      isMounted = false;
+    };
+  }, []);
+
+  const handleSignup = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!email || !password) {
-      toast.error('Email and access key are required.', {
+
+    if (!nodeId || !email || !password || !role) {
+      toast.error('All fields are required.', {
         icon: <AlertTriangle className="h-4 w-4 text-destructive" />
       });
       return;
     }
 
     try {
-      const response = await fetch('http://localhost:3001/api/login', {
+      const response = await fetch('http://localhost:3001/api/signup', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email, password })
+        body: JSON.stringify({
+          node_id: nodeId,
+          email,
+          password,
+          role
+        })
       });
 
       const payload = await response.json();
       if (!response.ok) {
-        toast.error(payload?.error || 'Unable to log in.', {
+        toast.error(payload?.error || 'Unable to create account.', {
           icon: <AlertTriangle className="h-4 w-4 text-destructive" />
         });
         return;
       }
 
-      if (!payload?.user) {
-        toast.error('Login failed. Missing user data.', {
-          icon: <AlertTriangle className="h-4 w-4 text-destructive" />
-        });
-        return;
-      }
-
-      login(payload.user);
+      toast.success('Account created. Please log in.');
+      setLocation('/login');
     } catch (err) {
-      console.error('Login request failed:', err);
+      console.error('Signup request failed:', err);
       toast.error('Unable to reach the server. Please try again.', {
         icon: <AlertTriangle className="h-4 w-4 text-destructive" />
       });
     }
-  };
-
-  const fillDemo = (role: 'hospital' | 'ambulance' | 'police') => {
-    setEmail(`demo@${role}`);
-    setPassword('');
   };
 
   return (
@@ -112,17 +143,34 @@ export default function LoginPage() {
             </div>
             <h1 className="text-4xl font-bold tracking-tight font-mono gradient-text">RESILINET</h1>
             <p className="text-muted-foreground text-[11px] uppercase tracking-[0.3em]">
-              Distributed Emergency Command
+              Node Onboarding Portal
             </p>
           </div>
 
-          <form onSubmit={handleLogin} className="space-y-5">
+          <form onSubmit={handleSignup} className="space-y-5">
             <div className="space-y-3">
               <div className="space-y-1.5">
-                <label className="text-[10px] uppercase tracking-widest text-muted-foreground font-mono">Portal ID</label>
+                  <label className="text-[10px] uppercase tracking-widest text-muted-foreground font-mono">Organization</label>
+                  <select
+                    id="nodeId"
+                    value={nodeId}
+                    onChange={(e) => setNodeId(e.target.value)}
+                    className="h-12 w-full rounded-md px-3 text-base font-mono bg-black/30 border border-violet-500/20 text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-400/50 focus-visible:border-violet-400/50"
+                    disabled={nodesLoading || nodes.length === 0}
+                  >
+                    <option value="">{nodesLoading ? 'Loading nodes...' : 'Select a node'}</option>
+                    {nodes.map((node) => (
+                      <option key={node.id} value={node.id}>
+                        {node.name} · {node.type}
+                      </option>
+                    ))}
+                  </select>
+              </div>
+              <div className="space-y-1.5">
+                <label className="text-[10px] uppercase tracking-widest text-muted-foreground font-mono">Email</label>
                 <Input
                   id="email"
-                  placeholder="demo@hospital"
+                  placeholder="ops@hospital.org"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
                   className="h-12 text-base font-mono bg-black/30 border-violet-500/20 focus-visible:ring-violet-400/50 focus-visible:border-violet-400/50"
@@ -140,6 +188,19 @@ export default function LoginPage() {
                   className="h-12 text-base font-mono bg-black/30 border-violet-500/20 focus-visible:ring-violet-400/50 focus-visible:border-violet-400/50"
                 />
               </div>
+              <div className="space-y-1.5">
+                <label className="text-[10px] uppercase tracking-widest text-muted-foreground font-mono">Role</label>
+                <select
+                  id="role"
+                  value={role}
+                  onChange={(e) => setRole(e.target.value)}
+                  className="h-12 w-full rounded-md px-3 text-base font-mono bg-black/30 border border-violet-500/20 text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-400/50 focus-visible:border-violet-400/50"
+                >
+                  <option value="hospital">Hospital</option>
+                  <option value="police">Police</option>
+                  <option value="ambulance">Ambulance</option>
+                </select>
+              </div>
             </div>
 
             <Button
@@ -151,44 +212,13 @@ export default function LoginPage() {
               }}
             >
               <Zap className="h-4 w-4 mr-2" />
-              Initialize Connection
+              Create Node Access
             </Button>
 
-            {/* Quick role pickers */}
             <div className="pt-4 border-t border-white/5 space-y-3">
-              <p className="text-center text-[10px] uppercase tracking-[0.3em] text-muted-foreground">Quick Demo Access</p>
-              <div className="grid grid-cols-3 gap-2">
-                <button
-                  type="button"
-                  onClick={() => fillDemo('hospital')}
-                  className="group flex flex-col items-center gap-1.5 py-3 rounded-lg border border-cyan-500/20 bg-cyan-500/5 hover:bg-cyan-500/15 hover:border-cyan-400/50 transition-all"
-                >
-                  <Activity className="h-4 w-4 text-cyan-400 group-hover:scale-110 transition-transform" />
-                  <span className="text-[10px] uppercase tracking-wider text-cyan-300 font-mono">Hospital</span>
-                </button>
-                <button
-                  type="button"
-                  onClick={() => fillDemo('ambulance')}
-                  className="group flex flex-col items-center gap-1.5 py-3 rounded-lg border border-emerald-500/20 bg-emerald-500/5 hover:bg-emerald-500/15 hover:border-emerald-400/50 transition-all"
-                >
-                  <Radio className="h-4 w-4 text-emerald-400 group-hover:scale-110 transition-transform" />
-                  <span className="text-[10px] uppercase tracking-wider text-emerald-300 font-mono">Ambulance</span>
-                </button>
-                <button
-                  type="button"
-                  onClick={() => fillDemo('police')}
-                  className="group flex flex-col items-center gap-1.5 py-3 rounded-lg border border-violet-500/20 bg-violet-500/5 hover:bg-violet-500/15 hover:border-violet-400/50 transition-all"
-                >
-                  <Shield className="h-4 w-4 text-violet-300 group-hover:scale-110 transition-transform" />
-                  <span className="text-[10px] uppercase tracking-wider text-violet-200 font-mono">Police</span>
-                </button>
-              </div>
+              <p className="text-center text-[10px] uppercase tracking-[0.3em] text-muted-foreground">Already registered</p>
               <p className="text-center text-[10px] font-mono text-muted-foreground/70">
-                Use the access key issued to your organization.
-              </p>
-              <p className="text-center text-[10px] font-mono text-muted-foreground/70">
-                Need access?{' '}
-                <Link href="/signup" className="text-violet-300 hover:text-violet-200">Request a node account</Link>
+                <Link href="/login" className="text-violet-300 hover:text-violet-200">Return to login</Link>
               </p>
             </div>
           </form>

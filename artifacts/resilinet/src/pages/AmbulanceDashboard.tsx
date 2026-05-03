@@ -4,10 +4,12 @@ import IslamabadMap from '../components/IslamabadMap';
 import { StatCard } from '../components/StatCard';
 import { Activity, CheckCircle2, Navigation, Truck, Fuel, MapPin } from 'lucide-react';
 import { Node } from '../lib/types';
+import { useAuth } from '../context/AuthContext';
 
 export default function AmbulanceDashboard() {
   const { nodes, incidents } = useResiliNet();
-  const ambulanceNode = nodes.find(n => n.type === 'ambulance') as Node;
+  const { user } = useAuth();
+  const ambulanceNode = nodes.find(n => n.id === user?.node_id) as Node;
   const ambulanceResources = ambulanceNode?.resources.ambulance;
 
   const assignedIncidents = incidents.filter(i => i.assignedNodeId === ambulanceNode?.id && i.status !== 'resolved');

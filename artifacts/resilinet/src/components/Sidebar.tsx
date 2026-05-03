@@ -13,7 +13,7 @@ import {
 
 export function Sidebar() {
   const [location] = useLocation();
-  const { role } = useAuth();
+  const { role, logout, user } = useAuth();
 
   const accentColor = role === 'hospital' ? '#60a5fa'
     : role === 'ambulance' ? '#5eead4'
@@ -36,7 +36,7 @@ export function Sidebar() {
   ];
 
   return (
-    <aside className="sidebar-surface w-[68px] hover:w-[230px] transition-all duration-300 ease-in-out fixed left-0 top-16 bottom-0 z-40 flex flex-col group overflow-hidden">
+    <aside className="sidebar-surface w-[68px] hover:w-[230px] transition-all duration-300 ease-in-out fixed left-0 top-28 bottom-0 z-40 flex flex-col group overflow-hidden">
       <nav className="flex-1 py-6 flex flex-col gap-1.5 px-2.5">
         {navItems.map((item) => {
           const isActive = location === item.href;
@@ -87,6 +87,14 @@ export function Sidebar() {
             Cluster Sync
           </span>
         </div>
+        {user && (
+          <button
+            onClick={logout}
+            className="mt-4 w-full flex items-center justify-center gap-2 px-3 py-2 rounded-lg text-[11px] uppercase font-mono text-muted-foreground border border-violet-500/20 hover:text-foreground hover:bg-violet-500/10 transition-colors"
+          >
+            Logout
+          </button>
+        )}
       </div>
     </aside>
   );

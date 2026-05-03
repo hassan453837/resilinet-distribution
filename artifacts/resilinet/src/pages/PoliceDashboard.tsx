@@ -6,10 +6,12 @@ import { Shield, ShieldAlert, ShieldCheck, MapPin, Crosshair } from 'lucide-reac
 import { Node } from '../lib/types';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../components/ui/select';
 import { Switch } from '../components/ui/switch';
+import { useAuth } from '../context/AuthContext';
 
 export default function PoliceDashboard() {
   const { nodes, incidents } = useResiliNet();
-  const policeNode = nodes.find(n => n.type === 'police') as Node;
+  const { user } = useAuth();
+  const policeNode = nodes.find(n => n.id === user?.node_id) as Node;
   const policeResources = policeNode?.resources.police;
 
   const crimeIncidents = incidents.filter(i => i.type === 'crime' && i.status !== 'resolved');

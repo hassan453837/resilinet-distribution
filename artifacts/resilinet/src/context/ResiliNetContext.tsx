@@ -1,8 +1,7 @@
 import React, { createContext, useContext, useState, useEffect, ReactNode, useCallback } from 'react';
 import { Node, Incident, AppEvent, EventType, IncidentStatus } from '../lib/types';
-import { SEED_NODES, SEED_INCIDENTS, SEED_EVENTS } from '../lib/seed';
-import { io } from 'socket.io-client';
-const socket = io('http://localhost:3001');
+import { SEED_INCIDENTS, SEED_EVENTS } from '../lib/seed';
+import { socket } from '../lib/socket';
 
 interface ResiliNetState {
   nodes: Node[];
@@ -24,8 +23,8 @@ const ResiliNetContext = createContext<ResiliNetContextType | undefined>(undefin
 
 export function ResiliNetProvider({ children }: { children: ReactNode }) {
   const [state, setState] = useState<ResiliNetState>({
-    nodes: SEED_NODES,
-    incidents: SEED_INCIDENTS,
+    nodes: [],
+    incidents: [],
     events: SEED_EVENTS
   });
 
@@ -91,13 +90,17 @@ export function ResiliNetProvider({ children }: { children: ReactNode }) {
   }, [fireEvent]);
 
   const resetSimulation = useCallback(() => {
-    setState({ nodes: SEED_NODES, incidents: SEED_INCIDENTS, events: SEED_EVENTS });
+    setState({ nodes: [], incidents: SEED_INCIDENTS, events: SEED_EVENTS });
   }, []);
 
   // Socket.IO real-time sync
   useEffect(() => {
     socket.on('init', (data: Incident[]) => {
       setState(prev => ({ ...prev, incidents: data }));
+    });
+
+    socket.on('init-nodes', (data: Node[]) => {
+      setState(prev => ({ ...prev, nodes: data }));
     });
 
     socket.on('add-incident', (incident: Incident) => {
@@ -114,77 +117,35 @@ export function ResiliNetProvider({ children }: { children: ReactNode }) {
       }));
     });
 
-    socket.on('node-offline', ({ name }: { name: string }) => {
-      const lowerName = name.toLowerCase();
+    socket.on('node-offline', (node: Node) => {
+      if (!node?.id) return;
       setState(prev => ({
         ...prev,
-        nodes: prev.nodes.map(n =>
-          n.name === name ||
-          n.id === name ||
-          n.id.toLowerCase() === lowerName ||
-          n.name.toLowerCase() === lowerName ||
-          n.type.toLowerCase() === lowerName
-            ? { ...n, status: 'offline' }
-            : n
-        )
+        nodes: prev.nodes.some(n => n.id === node.id)
+          ? prev.nodes.map(n => n.id === node.id ? { ...n, ...node, status: 'offline' } : n)
+          : [node, ...prev.nodes]
       }));
     });
 
-    socket.on('node-online', ({ name }: { name: string }) => {
-      const lowerName = name.toLowerCase();
+    socket.on('node-online', (node: Node) => {
+      if (!node?.id) return;
       setState(prev => ({
         ...prev,
         nodes: prev.nodes.map(n =>
-          n.name === name ||
-          n.id === name ||
-          n.id.toLowerCase() === lowerName ||
-          n.name.toLowerCase() === lowerName ||
-          n.type.toLowerCase() === lowerName
-            ? { ...n, status: 'online', lastHeartbeat: Date.now() }
-            : n
+          n.id === node.id ? { ...n, ...node, status: 'online', lastHeartbeat: Date.now() } : n
         )
       }));
     });
 
     return () => {
       socket.off('init');
+      socket.off('init-nodes');
       socket.off('add-incident');
       socket.off('resolve-incident');
       socket.off('node-offline');
       socket.off('node-online');
     };
   }, []);
-
-  // Simulation loop
-  useEffect(() => {
-    // Heartbeat every 3s
-    const heartbeatTimer = setInterval(() => {
-      setState(prev => ({
-        ...prev,
-        nodes: prev.nodes.map(n => n.status === 'online' ? { ...n, lastHeartbeat: Date.now() } : n)
-      }));
-    }, 3000);
-
-    // Random events every 9s
-    const randomEventTimer = setInterval(() => {
-      // 20% chance to spawn a random minor incident
-      if (Math.random() < 0.2) {
-        addIncident({
-          title: 'Automated minor alert',
-          description: 'Simulated random incident from edge sensor network.',
-          severity: 'low',
-          type: 'medical',
-          status: 'active',
-          location: { lat: 33.68 + (Math.random() * 0.1 - 0.05), lng: 73.04 + (Math.random() * 0.1 - 0.05) }
-        });
-      }
-    }, 9000);
-
-    return () => {
-      clearInterval(heartbeatTimer);
-      clearInterval(randomEventTimer);
-    };
-  }, [addIncident]);
 
   return (
     <ResiliNetContext.Provider value={{ 

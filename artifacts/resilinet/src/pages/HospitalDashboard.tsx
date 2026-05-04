@@ -20,13 +20,22 @@ const bloodBarClass: Record<string, string> = {
 export default function HospitalDashboard() {
   const { nodes, incidents } = useResiliNet();
   const { user } = useAuth();
-  const hospitalNode = nodes.find(n => n.id === user?.node_id) as Node;
-  const hospitalResources = hospitalNode?.resources.hospital;
+  
+  const hospitalNode = nodes.find(n => n.id === user?.node_id);
+
+  // Use the database resources, OR fallback to empty defaults to prevent "Loading..." loop
+  const hospitalResources = hospitalNode?.resources?.hospital || {
+    beds: 0,
+    icu: 0,
+    blood: { 'O+': 0, 'O-': 0, 'A+': 0, 'A-': 0, 'B+': 0, 'B-': 0, 'AB+': 0, 'AB-': 0 },
+    acceptingCases: false
+  };
 
   const medicalIncidents = incidents.filter(i => i.type === 'medical' && i.status !== 'resolved');
 
-  if (!hospitalNode || !hospitalResources) return <div>Loading...</div>;
-
+  // Remove the strict "if (!hospitalResources) return..." line
+  if (!hospitalNode) return <div className="p-10 text-white">Connecting to Node: {user?.node_id}...</div>;
+    // ... rest of your UI code will now work because hospitalResources is never undefined
   return (
     <div className="grid grid-cols-12 gap-5 h-[calc(100vh-7rem)]">
       {/* Left Column */}

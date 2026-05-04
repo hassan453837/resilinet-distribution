@@ -5,7 +5,13 @@ import AmbulanceDashboard from './AmbulanceDashboard';
 import PoliceDashboard from './PoliceDashboard';
 
 export default function Dashboard() {
-  const { role } = useAuth();
+  const { role, user, isLoading } = useAuth();
+
+  console.log('DASHBOARD_CHECK:', { role, user, isLoading });
+
+  if (isLoading) {
+    return <div className="p-20 text-white">Auth Context is still loading...</div>;
+  }
 
   switch (role) {
     case 'hospital':
@@ -15,6 +21,12 @@ export default function Dashboard() {
     case 'police':
       return <PoliceDashboard />;
     default:
-      return <div>Invalid Role</div>;
+      return (
+        <div className="p-20 text-white bg-red-900/20 border border-red-500 rounded">
+          <h2 className="text-xl font-bold">Invalid or Missing Role</h2>
+          <p>Current Role: {role || 'null/undefined'}</p>
+          <p>User ID: {user?.id || 'No user found'}</p>
+        </div>
+      );
   }
 }

@@ -2,20 +2,48 @@ import React from 'react';
 import { useResiliNet } from '../context/ResiliNetContext';
 import IslamabadMap from '../components/IslamabadMap';
 import { StatCard } from '../components/StatCard';
-import { Activity, CheckCircle2, Navigation, Truck, Fuel, MapPin } from 'lucide-react';
+import { Activity, CheckCircle2, Navigation, Truck, Fuel, MapPin, Loader2 } from 'lucide-react';
 import { Node } from '../lib/types';
 import { useAuth } from '../context/AuthContext';
 
 export default function AmbulanceDashboard() {
   const { nodes, incidents } = useResiliNet();
   const { user } = useAuth();
+
+  // Find the node assigned to this user
   const ambulanceNode = nodes.find(n => n.id === user?.node_id) as Node;
-  const ambulanceResources = ambulanceNode?.resources.ambulance;
 
-  const assignedIncidents = incidents.filter(i => i.assignedNodeId === ambulanceNode?.id && i.status !== 'resolved');
+  // Defensive check: Normalize resource fields across legacy/new DB shapes
+  const ambulanceResources = {
+    unitsAvailable: ambulanceNode?.resources?.ambulance?.unitsAvailable ?? 0,
+    unitsOnDuty: ambulanceNode?.resources?.ambulance?.unitsOnDuty ?? 0,
+    totalUnits: ambulanceNode?.resources?.ambulance?.totalUnits ?? 0,
+    fuelLevel: ambulanceNode?.resources?.ambulance?.fuelLevel ?? 0,
+  };
 
-  if (!ambulanceNode || !ambulanceResources) return <div>Loading...</div>;
+  const assignedIncidents = incidents.filter(
+    i => i.assignedNodeId === ambulanceNode?.id && i.status !== 'resolved'
+  );
 
+  // Diagnostic Log - Check your console if it's still stuck
+  console.log("AMBULANCE_DATA_CHECK:", {
+    targetId: user?.node_id,
+    nodeFound: !!ambulanceNode,
+    resourcesFound: !!ambulanceNode?.resources?.ambulance
+  });
+
+  // If the Node simply doesn't exist in the DB
+  if (!ambulanceNode) {
+    return (
+      <div className="p-8 bg-destructive/10 border border-destructive rounded-lg text-destructive">
+        <h2 className="text-lg font-bold mb-2">Station Mapping Error</h2>
+        <p>Could not find ambulance station with ID: <strong>{user?.node_id || 'Not Assigned'}</strong></p>
+        <p className="text-sm mt-2">Please ensure your user profile is linked to a valid node in the database.</p>
+      </div>
+    );
+  }
+
+  
   return (
     <div className="grid grid-cols-12 gap-5 h-[calc(100vh-7rem)]">
       <div className="col-span-3 flex flex-col gap-4">

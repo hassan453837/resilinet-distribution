@@ -1,28 +1,24 @@
 import React from 'react';
-import { Switch, Route, Router as WouterRouter } from "wouter";
+import { Switch, Route, Router as WouterRouter, Redirect } from "wouter";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { Toaster } from "sonner";
 import { TooltipProvider } from "./components/ui/tooltip";
-import NotFound from "./pages/not-found";
 
-import { AuthProvider } from "./context/AuthContext";
+// Context & Auth
+import { AuthProvider, useAuth } from "./context/AuthContext";
 import { ResiliNetProvider } from "./context/ResiliNetContext";
 import { ProtectedRoute } from "./components/ProtectedRoute";
 import { AppShell } from "./components/AppShell";
 import { CommandPalette } from "./components/CommandPalette";
 
-import { Redirect } from "wouter";
+// Pages
+import NotFound from "./pages/not-found";
 import LoginPage from "./pages/LoginPage";
 import SignupPage from "./pages/SignupPage";
 import Dashboard from "./pages/Dashboard";
-import { useAuth } from "./context/AuthContext";
-
-function RootRedirect() {
-  const { isAuthenticated } = useAuth();
-  return <Redirect to={isAuthenticated ? "/dashboard" : "/login"} />;
-}
 import MapPage from "./pages/MapPage";
 import IncidentsPage from "./pages/IncidentsPage";
+import CreateIncidentPage from "./pages/CreateIncidentPage";
 import HospitalPortal from "./pages/HospitalPortal";
 import AmbulancePortal from "./pages/AmbulancePortal";
 import PolicePortal from "./pages/PolicePortal";
@@ -32,32 +28,77 @@ import ConceptsPage from "./pages/ConceptsPage";
 
 const queryClient = new QueryClient();
 
+/**
+ * Helper component to wrap protected pages in the layout
+ */
+const ProtectedLayout = ({ children }: { children: React.ReactNode }) => (
+  <ProtectedRoute>
+    <AppShell>{children}</AppShell>
+  </ProtectedRoute>
+);
+
+/**
+ * Handles the root "/" logic
+ */
+function RootRedirect() {
+  const { isAuthenticated } = useAuth();
+  return <Redirect to={isAuthenticated ? "/dashboard" : "/login"} />;
+}
+
 function AppContent() {
   return (
     <>
       <Switch>
+        {/* 1. PUBLIC ROUTES */}
         <Route path="/login" component={LoginPage} />
         <Route path="/signup" component={SignupPage} />
         <Route path="/" component={RootRedirect} />
 
-        <Route path="/:rest*">
-          <ProtectedRoute>
-            <AppShell>
-              <Switch>
-                <Route path="/dashboard" component={Dashboard} />
-                <Route path="/map" component={MapPage} />
-                <Route path="/incidents" component={IncidentsPage} />
-                <Route path="/hospital" component={HospitalPortal} />
-                <Route path="/ambulance" component={AmbulancePortal} />
-                <Route path="/police" component={PolicePortal} />
-                <Route path="/analytics" component={AnalyticsPage} />
-                <Route path="/events" component={EventLogPage} />
-                <Route path="/concepts" component={ConceptsPage} />
-                <Route component={NotFound} />
-              </Switch>
-            </AppShell>
-          </ProtectedRoute>
+        {/* 2. PROTECTED ROUTES (Flattened for stability) */}
+        
+        {/* IMPORTANT: Specific sub-routes must come BEFORE their parents */}
+        <Route path="/incidents/create">
+          <ProtectedLayout><CreateIncidentPage /></ProtectedLayout>
         </Route>
+
+        <Route path="/incidents">
+          <ProtectedLayout><IncidentsPage /></ProtectedLayout>
+        </Route>
+
+        <Route path="/dashboard">
+          <ProtectedLayout><Dashboard /></ProtectedLayout>
+        </Route>
+
+        <Route path="/map">
+          <ProtectedLayout><MapPage /></ProtectedLayout>
+        </Route>
+
+        <Route path="/hospital">
+          <ProtectedLayout><HospitalPortal /></ProtectedLayout>
+        </Route>
+
+        <Route path="/ambulance">
+          <ProtectedLayout><AmbulancePortal /></ProtectedLayout>
+        </Route>
+
+        <Route path="/police">
+          <ProtectedLayout><PolicePortal /></ProtectedLayout>
+        </Route>
+
+        <Route path="/analytics">
+          <ProtectedLayout><AnalyticsPage /></ProtectedLayout>
+        </Route>
+
+        <Route path="/events">
+          <ProtectedLayout><EventLogPage /></ProtectedLayout>
+        </Route>
+
+        <Route path="/concepts">
+          <ProtectedLayout><ConceptsPage /></ProtectedLayout>
+        </Route>
+
+        {/* 3. FALLBACK */}
+        <Route component={NotFound} />
       </Switch>
       <CommandPalette />
     </>
@@ -68,7 +109,7 @@ function App() {
   return (
     <QueryClientProvider client={queryClient}>
       <TooltipProvider>
-        <WouterRouter base={import.meta.env.BASE_URL.replace(/\/$/, "")}>
+        <WouterRouter>
           <AuthProvider>
             <ResiliNetProvider>
               <AppContent />

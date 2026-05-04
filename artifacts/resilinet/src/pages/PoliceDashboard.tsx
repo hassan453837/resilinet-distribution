@@ -1,23 +1,83 @@
 import React from 'react';
 import { useResiliNet } from '../context/ResiliNetContext';
 import IslamabadMap from '../components/IslamabadMap';
-import { StatCard } from '../components/StatCard';
 import { Shield, ShieldAlert, ShieldCheck, MapPin, Crosshair } from 'lucide-react';
 import { Node } from '../lib/types';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../components/ui/select';
 import { Switch } from '../components/ui/switch';
 import { useAuth } from '../context/AuthContext';
 
+function StatCard({
+  title,
+  value,
+  icon: Icon,
+  accentColor,
+  description,
+}: {
+  title: string;
+  value: React.ReactNode;
+  icon: React.ElementType;
+  accentColor?: string;
+  description?: string;
+}) {
+  return (
+    <div className="glass-card accent-police p-5">
+      <div className="flex items-start justify-between gap-4">
+        <div>
+          <div className="label-muted mb-1">{title}</div>
+          <div className="text-2xl font-semibold text-white">{value}</div>
+          {description && <div className="text-xs text-muted-foreground mt-1">{description}</div>}
+        </div>
+        <Icon className={`h-5 w-5 ${accentColor === 'violet' ? 'text-violet-300' : 'text-white/70'}`} />
+      </div>
+    </div>
+  );
+}
+
 export default function PoliceDashboard() {
-  const { nodes, incidents } = useResiliNet();
+  const { nodes = [], incidents = [] } = useResiliNet();
   const { user } = useAuth();
+
+  // Find the specific precinct node assigned to this user
   const policeNode = nodes.find(n => n.id === user?.node_id) as Node;
-  const policeResources = policeNode?.resources.police;
 
-  const crimeIncidents = incidents.filter(i => i.type === 'crime' && i.status !== 'resolved');
+  // FALLBACK: Provides default values if the JSON in the DB is missing keys or hasn't loaded
+  const policeResources = policeNode?.resources?.police || {
+    unitsAvailable: 0,
+    unitsOnPatrol: 0,
+    totalUnits: 0,
+    activeZone: 'Blue Area',
+    armed: false
+  };
 
-  if (!policeNode || !policeResources) return <div>Loading...</div>;
+  const crimeIncidents = incidents.filter(
+    (i) => i.type === 'crime' && i.status !== 'resolved'
+  );
 
+  // Diagnostic Log - Keep this open in F12 to verify IDs
+  console.log("POLICE_DATA_CHECK:", {
+    targetId: user?.node_id,
+    nodeFound: !!policeNode,
+    resourcesFound: !!policeNode?.resources?.police
+  });
+
+  // Error State: Node Not Found
+  if (!policeNode) {
+    return (
+      <div className="p-8 m-6 glass-card border-red-500/50 bg-red-500/5 text-red-400">
+        <h2 className="text-xl font-bold mb-2 flex items-center gap-2">
+          <ShieldAlert className="h-5 w-5" /> 
+          Precinct Mapping Error
+        </h2>
+        <p className="text-sm opacity-80">
+          User is assigned to Node ID: <span className="font-mono text-white px-2 py-1 bg-white/10 rounded">{user?.node_id || 'NOT_FOUND'}</span>
+        </p>
+        <p className="text-xs mt-4 italic opacity-60">Check the 'nodes' table in Supabase to ensure this ID exists.</p>
+      </div>
+    );
+  }
+
+  
   return (
     <div className="grid grid-cols-12 gap-5 h-[calc(100vh-7rem)]">
       <div className="col-span-3 flex flex-col gap-4">

@@ -1,23 +1,36 @@
-import React, { ReactNode } from 'react';
-import { useLocation } from 'wouter';
+import React, { ReactNode, useState, useEffect } from 'react';
+import { useLocation, Redirect } from 'wouter';
 import { useAuth } from '../context/AuthContext';
 
 export function ProtectedRoute({ children }: { children: ReactNode }) {
-  const { isAuthenticated } = useAuth();
-  const [location, setLocation] = useLocation();
+  const { isAuthenticated, user } = useAuth();
+  const [location] = useLocation();
+  const [isReady, setIsReady] = useState(false);
 
-  React.useEffect(() => {
-    if (!isAuthenticated) {
-      setLocation('/login');
-      return;
-    }
-    if (location === '/' || location === '') {
-      setLocation('/dashboard');
-    }
-  }, [isAuthenticated, location, setLocation]);
+  // Give the Auth state a moment to "settle" on initial load
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setIsReady(true);
+    }, 100); // 100ms is usually enough to catch the Supabase session
+    return () => clearTimeout(timer);
+  }, []);
 
-  if (!isAuthenticated) return null;
-  if (location === '/' || location === '') return null;
+  // 1. Wait for the 'Ready' flag
+  if (!isReady) {
+    return null; // Or a loading spinner
+  }
 
+  // 2. If we are ready and still not authenticated, bounce to login
+  if (!isAuthenticated) {
+    console.log("Not authenticated, redirecting...");
+    return <Redirect to="/login" />;
+  }
+
+  // 3. Handle root redirect
+  if (location === '/' || location === '') {
+    return <Redirect to="/dashboard" />;
+  }
+
+  // 4. Everything is good!
   return <>{children}</>;
 }

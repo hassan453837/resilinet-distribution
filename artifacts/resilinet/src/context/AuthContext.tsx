@@ -19,6 +19,7 @@ interface AuthState {
 }
 
 interface AuthContextType extends AuthState {
+  isLoading: boolean;
   login: (user: AuthUser) => void;
   logout: () => void;
 }
@@ -50,12 +51,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
     return { user: null, username: null, role: null, isAuthenticated: false };
   });
+  const [isLoading, setIsLoading] = useState(true);
 
   const [, setLocation] = useLocation();
 
   useEffect(() => {
     localStorage.setItem('resilinet_auth', JSON.stringify(state));
   }, [state]);
+
+  useEffect(() => {
+    setIsLoading(false);
+  }, []);
 
   useEffect(() => {
     return () => {
@@ -106,7 +112,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   return (
-    <AuthContext.Provider value={{ ...state, login, logout }}>
+    <AuthContext.Provider value={{ ...state, isLoading, login, logout }}>
       {children}
     </AuthContext.Provider>
   );

@@ -1,11 +1,12 @@
 import React, { useState } from 'react';
 import { useResiliNet } from '../context/ResiliNetContext';
+import { Link } from 'wouter';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '../components/ui/card';
 import { Badge } from '../components/ui/badge';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
 import { SeverityBadge } from '../components/SeverityBadge';
-import { LayoutGrid, List, Search, SlidersHorizontal, CheckCircle } from 'lucide-react';
+import { LayoutGrid, List, Search, SlidersHorizontal, CheckCircle, Plus } from 'lucide-react';
 import confetti from 'canvas-confetti';
 import { Incident } from '../lib/types';
 import { Textarea } from '../components/ui/textarea';
@@ -50,6 +51,12 @@ export default function IncidentsPage() {
               />
             </div>
             <div className="flex items-center gap-2">
+              <Link href="/incidents/create">
+                <Button className="bg-primary hover:bg-primary/90 gap-2">
+                  <Plus className="w-4 h-4" />
+                  New Incident
+                </Button>
+              </Link>
               <Button variant="outline" size="icon" className="border-white/10 bg-secondary/50">
                 <SlidersHorizontal className="w-4 h-4" />
               </Button>

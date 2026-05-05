@@ -22,6 +22,7 @@ const io = new Server(server, { cors: { origin: '*' } });
 
 let incidents = [];
 let nodes = [];
+let tacticalMessages = [];
 let nodeHeartbeats = {};
 let socketNodeMap = {};
 
@@ -43,6 +44,22 @@ async function loadNodes() {
     return;
   }
   nodes = (data || []).map(mapNodeRecord);
+}
+
+async function loadMessages() {
+  const { data, error } = await supabase
+    .from('messages')
+    .select('id, created_at, sender_id, recipient_id, content, type')
+    .order('created_at', { ascending: true })
+    .limit(200);
+
+  if (error) {
+    console.error('Failed to load messages from Supabase:', error.message);
+    tacticalMessages = [];
+    return;
+  }
+
+  tacticalMessages = data || [];
 }
 
 function mapNodeRecord(node) {
@@ -215,6 +232,49 @@ app.post('/api/logout', async (req, res) => {
   return res.json({ ok: true });
 });
 
+app.post('/api/messages', async (req, res) => {
+  const { sender_id, recipient_id = null, content, type } = req.body || {};
+
+  if (!sender_id || !content || !type) {
+    return res.status(400).json({ error: 'Missing required message fields.' });
+  }
+
+  const payload = {
+    sender_id,
+    recipient_id,
+    content,
+    type,
+  };
+
+  const { data, error } = await supabase
+    .from('messages')
+    .insert(payload)
+    .select('id, created_at, sender_id, recipient_id, content, type')
+    .single();
+
+  if (error) {
+    console.error('Failed to save tactical message:', error.message);
+
+    const fallbackMessage = {
+      id: `MSG-${Date.now()}`,
+      created_at: new Date().toISOString(),
+      sender_id,
+      recipient_id,
+      content,
+      type,
+    };
+
+    tacticalMessages = [...tacticalMessages, fallbackMessage];
+    io.emit('tactical-message', fallbackMessage);
+    return res.status(202).json({ ok: true, message: fallbackMessage, warning: error.message });
+  }
+
+  const savedMessage = data || payload;
+  tacticalMessages = [...tacticalMessages, savedMessage];
+  io.emit('tactical-message', savedMessage);
+  return res.status(201).json({ ok: true, message: savedMessage });
+});
+
 app.get('/api/nodes', async (_req, res) => {
   if (!nodes.length) {
     await loadNodes();
@@ -226,6 +286,7 @@ io.on('connection', (socket) => {
   console.log('Client connected:', socket.id);
   socket.emit('init', incidents.filter(Boolean));
   socket.emit('init-nodes', nodes);
+  socket.emit('tactical-message-init', tacticalMessages);
 
   socket.on('register-node', ({ nodeId }) => {
     if (nodeId) {
@@ -306,6 +367,51 @@ io.on('connection', (socket) => {
     delete nodeHeartbeats[nodeId];
   });
 
+  socket.on('tactical-message', async (message, ack) => {
+    const { sender_id, recipient_id = null, content, type } = message || {};
+
+    if (!sender_id || !content || !type) {
+      if (typeof ack === 'function') ack({ ok: false, error: 'Missing required message fields.' });
+      return;
+    }
+
+    const payload = {
+      sender_id,
+      recipient_id,
+      content,
+      type,
+    };
+
+    const { data, error } = await supabase
+      .from('messages')
+      .insert(payload)
+      .select('id, created_at, sender_id, recipient_id, content, type')
+      .single();
+
+    if (error) {
+      console.error('Failed to save tactical message:', error.message);
+
+      const fallbackMessage = {
+        id: `MSG-${Date.now()}`,
+        created_at: new Date().toISOString(),
+        sender_id,
+        recipient_id,
+        content,
+        type,
+      };
+
+      tacticalMessages = [...tacticalMessages, fallbackMessage];
+      io.emit('tactical-message', fallbackMessage);
+      if (typeof ack === 'function') ack({ ok: true, message: fallbackMessage, warning: error.message });
+      return;
+    }
+
+    const savedMessage = data || payload;
+    tacticalMessages = [...tacticalMessages, savedMessage];
+    io.emit('tactical-message', savedMessage);
+    if (typeof ack === 'function') ack({ ok: true, message: savedMessage });
+  });
+
   socket.on('disconnect', async () => {
     console.log('Client disconnected:', socket.id);
     const nodeId = socketNodeMap[socket.id] || socket.data.nodeId;
@@ -352,6 +458,7 @@ setInterval(() => {
 async function startServer() {
   await loadIncidents();
   await loadNodes();
+  await loadMessages();
   server.listen(3001, () => console.log('Hub server running on port 3001'));
 }
 

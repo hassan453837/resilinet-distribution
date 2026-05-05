@@ -1,25 +1,51 @@
-import React from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { useResiliNet } from '../context/ResiliNetContext';
 import IslamabadMap from '../components/IslamabadMap';
 import { StatCard } from '../components/StatCard';
 import { Activity, CheckCircle2, Navigation, Truck, Fuel, MapPin, Loader2 } from 'lucide-react';
 import { Node } from '../lib/types';
 import { useAuth } from '../context/AuthContext';
+import { Button } from '../components/ui/button';
+import { Input } from '../components/ui/input';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '../components/ui/dialog';
+
+const DEFAULT_AMBULANCE_RESOURCES = {
+  unitsAvailable: 0,
+  unitsOnDuty: 0,
+  totalUnits: 0,
+  fuelLevel: 0,
+};
 
 export default function AmbulanceDashboard() {
-  const { nodes, incidents } = useResiliNet();
+  const { nodes, incidents, updateNodeResources, fireEvent } = useResiliNet();
   const { user } = useAuth();
+  const [editOpen, setEditOpen] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
+  const [draft, setDraft] = useState(DEFAULT_AMBULANCE_RESOURCES);
 
   // Find the node assigned to this user
   const ambulanceNode = nodes.find(n => n.id === user?.node_id) as Node;
 
   // Defensive check: Normalize resource fields across legacy/new DB shapes
-  const ambulanceResources = {
+  const ambulanceResources = useMemo(() => ({
     unitsAvailable: ambulanceNode?.resources?.ambulance?.unitsAvailable ?? 0,
     unitsOnDuty: ambulanceNode?.resources?.ambulance?.unitsOnDuty ?? 0,
     totalUnits: ambulanceNode?.resources?.ambulance?.totalUnits ?? 0,
     fuelLevel: ambulanceNode?.resources?.ambulance?.fuelLevel ?? 0,
-  };
+  }), [ambulanceNode]);
+
+  useEffect(() => {
+    if (editOpen) {
+      setDraft(ambulanceResources);
+    }
+  }, [editOpen, ambulanceResources]);
 
   const assignedIncidents = incidents.filter(
     i => i.assignedNodeId === ambulanceNode?.id && i.status !== 'resolved'
@@ -31,6 +57,24 @@ export default function AmbulanceDashboard() {
     nodeFound: !!ambulanceNode,
     resourcesFound: !!ambulanceNode?.resources?.ambulance
   });
+
+  const handleAmbulanceSave = async (event: React.FormEvent) => {
+    event.preventDefault();
+    if (!ambulanceNode) return;
+
+    setIsSaving(true);
+    try {
+      await updateNodeResources(ambulanceNode.id, {
+        ambulance: {
+          ...draft,
+        },
+      });
+      fireEvent('STATUS_UPDATED', `Ambulance ${ambulanceNode.id} updated resource stats`, ambulanceNode.id);
+      setEditOpen(false);
+    } finally {
+      setIsSaving(false);
+    }
+  };
 
   // If the Node simply doesn't exist in the DB
   if (!ambulanceNode) {
@@ -84,9 +128,19 @@ export default function AmbulanceDashboard() {
             <div>LNG: <span className="text-teal-300">{ambulanceNode.location.lng.toFixed(6)}</span></div>
           </div>
         </div>
+
+        <div className="glass-card accent-ambulance p-4">
+          <div className="space-y-2">
+            <div className="text-sm font-medium">Edit Stats</div>
+            <div className="text-[11px] text-muted-foreground">Update unit counts and fleet fuel level.</div>
+          </div>
+          <Button type="button" variant="outline" className="mt-3 w-full border-teal-500/20 bg-teal-500/10 text-teal-100 hover:bg-teal-500/20" onClick={() => setEditOpen(true)}>
+            Open Editor
+          </Button>
+        </div>
       </div>
 
-      <div className="col-span-6 flex flex-col">
+      <div className="col-span-9 flex flex-col">
         <div className="glass-card accent-ambulance flex-1 p-1.5 overflow-hidden relative">
           <div className="absolute top-3 right-3 z-10 px-3 py-1.5 rounded-md text-[10px] font-mono tracking-widest"
             style={{ background: 'rgba(5, 4, 20, 0.85)', border: '1px solid rgba(20, 184, 166, 0.4)', color: '#5eead4', boxShadow: '0 0 12px rgba(20, 184, 166, 0.25)' }}>
@@ -96,36 +150,44 @@ export default function AmbulanceDashboard() {
         </div>
       </div>
 
-      <div className="col-span-3 flex flex-col">
-        <div className="glass-card accent-ambulance flex-1 flex flex-col overflow-hidden">
-          <div className="px-5 py-4 border-b border-teal-500/20 flex items-center justify-between">
-            <span className="label-muted">Active Dispatches</span>
-            <span className="severity-pill" style={{ background: 'rgba(20,184,166,0.15)', borderColor: 'rgba(20,184,166,0.5)', color: '#99f6e4' }}>
-              {assignedIncidents.length} En Route
-            </span>
-          </div>
-          <div className="flex-1 overflow-auto p-4 space-y-3">
-            {assignedIncidents.map(inc => (
-              <div key={inc.id} className={`incident-row ${inc.severity}`}>
-                <div className="flex items-start justify-between mb-1.5">
-                  <span className="font-mono text-[10px] text-teal-300 tracking-wider">{inc.id}</span>
-                  <span className={`severity-pill ${inc.severity}`}>{inc.severity}</span>
-                </div>
-                <div className="text-[13px] font-medium leading-snug">{inc.title}</div>
-                <div className="text-[11px] text-muted-foreground truncate flex items-center gap-1 mt-1.5">
-                  <MapPin className="h-3 w-3" /> {inc.location.address}
-                </div>
+      <Dialog open={editOpen} onOpenChange={setEditOpen}>
+        <DialogContent className="max-h-[85vh] overflow-y-auto border border-teal-500/20 bg-card/95 backdrop-blur-xl sm:max-w-xl">
+          <form onSubmit={handleAmbulanceSave} className="space-y-5">
+            <DialogHeader>
+              <DialogTitle>Edit Ambulance Stats</DialogTitle>
+              <DialogDescription>
+                Update the resource values shown on the left panel.
+              </DialogDescription>
+            </DialogHeader>
+
+            <div className="grid gap-4 sm:grid-cols-2">
+              <div className="space-y-2">
+                <label className="text-xs uppercase tracking-[0.2em] text-muted-foreground">Units Available</label>
+                <Input type="number" min={0} value={draft.unitsAvailable} onChange={(event) => setDraft(prev => ({ ...prev, unitsAvailable: Number(event.target.value) }))} className="bg-secondary/50 border-white/10" />
               </div>
-            ))}
-            {assignedIncidents.length === 0 && (
-              <div className="text-center text-muted-foreground text-sm py-12 flex flex-col items-center gap-3">
-                <CheckCircle2 className="w-8 h-8 text-teal-500/40" />
-                No active dispatches
+              <div className="space-y-2">
+                <label className="text-xs uppercase tracking-[0.2em] text-muted-foreground">Units On Duty</label>
+                <Input type="number" min={0} value={draft.unitsOnDuty} onChange={(event) => setDraft(prev => ({ ...prev, unitsOnDuty: Number(event.target.value) }))} className="bg-secondary/50 border-white/10" />
               </div>
-            )}
-          </div>
-        </div>
-      </div>
+              <div className="space-y-2">
+                <label className="text-xs uppercase tracking-[0.2em] text-muted-foreground">Total Units</label>
+                <Input type="number" min={0} value={draft.totalUnits} onChange={(event) => setDraft(prev => ({ ...prev, totalUnits: Number(event.target.value) }))} className="bg-secondary/50 border-white/10" />
+              </div>
+              <div className="space-y-2">
+                <label className="text-xs uppercase tracking-[0.2em] text-muted-foreground">Fuel Level (%)</label>
+                <Input type="number" min={0} max={100} value={draft.fuelLevel} onChange={(event) => setDraft(prev => ({ ...prev, fuelLevel: Number(event.target.value) }))} className="bg-secondary/50 border-white/10" />
+              </div>
+            </div>
+
+            <DialogFooter>
+              <Button type="button" variant="outline" onClick={() => setEditOpen(false)} className="border-white/10">Cancel</Button>
+              <Button type="submit" disabled={isSaving} className="bg-teal-500 text-slate-950 hover:bg-teal-400">
+                {isSaving ? 'Saving...' : 'Save Changes'}
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

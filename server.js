@@ -64,6 +64,32 @@ async function loadMessages() {
 
 function mapNodeRecord(node) {
   if (!node) return null;
+
+  const defaultResourcesByType = {
+    hospital: {
+      beds: 0,
+      icu: 0,
+      blood: { 'O+': 0, 'O-': 0, 'A+': 0, 'A-': 0, 'B+': 0, 'B-': 0, 'AB+': 0, 'AB-': 0 },
+      acceptingCases: false
+    },
+    ambulance: {
+      unitsAvailable: 0,
+      unitsOnDuty: 0,
+      totalUnits: 0,
+      fuelLevel: 0
+    },
+    police: {
+      unitsAvailable: 0,
+      unitsOnPatrol: 0,
+      totalUnits: 0,
+      activeZone: '',
+      armed: false
+    }
+  };
+
+  const rawResources = node.resources || {};
+  const baseResources = defaultResourcesByType[node.type] || {};
+
   return {
     id: node.id,
     name: node.name,
@@ -74,7 +100,22 @@ function mapNodeRecord(node) {
       lng: node.location_lng ?? 0,
       address: node.location_address || ''
     },
-    resources: node.resources || {},
+    resources: {
+      ...baseResources,
+      ...rawResources,
+      hospital: {
+        ...defaultResourcesByType.hospital,
+        ...(rawResources.hospital || {})
+      },
+      ambulance: {
+        ...defaultResourcesByType.ambulance,
+        ...(rawResources.ambulance || {})
+      },
+      police: {
+        ...defaultResourcesByType.police,
+        ...(rawResources.police || {})
+      }
+    },
     lastHeartbeat: node.last_heartbeat ?? 0
   };
 }
@@ -230,6 +271,91 @@ app.post('/api/logout', async (req, res) => {
 
   delete nodeHeartbeats[node_id];
   return res.json({ ok: true });
+});
+
+app.patch('/api/nodes/:id/resources', async (req, res) => {
+  const nodeId = req.params.id;
+  const { resources } = req.body || {};
+
+  if (!nodeId || !resources || typeof resources !== 'object') {
+    return res.status(400).json({ error: 'Node resources are required.' });
+  }
+
+  // Fetch existing resources then merge deeply to avoid replacing other resource types
+  try {
+    const { data: existingRow, error: fetchError } = await supabase
+      .from('nodes')
+      .select('resources')
+      .eq('id', nodeId)
+      .single();
+
+    if (fetchError) {
+      console.error('Failed to fetch existing node resources:', fetchError.message);
+      return res.status(500).json({ error: fetchError.message });
+    }
+
+    const existingResources = existingRow?.resources || {};
+
+    // Deep merge helper for plain objects
+    const isObject = (val) => val && typeof val === 'object' && !Array.isArray(val);
+    const deepMerge = (target, source) => {
+      const out = { ...target };
+      for (const key of Object.keys(source || {})) {
+        const srcVal = source[key];
+        const tgtVal = out[key];
+        if (isObject(srcVal) && isObject(tgtVal)) {
+          out[key] = deepMerge(tgtVal, srcVal);
+        } else {
+          out[key] = srcVal;
+        }
+      }
+      return out;
+    };
+
+    const mergedResources = deepMerge(existingResources, resources);
+
+    const { data, error } = await supabase
+      .from('nodes')
+      .update({ resources: mergedResources })
+      .eq('id', nodeId)
+      .select('*')
+      .single();
+
+    if (error) {
+      console.error('Failed to update node resources:', error.message);
+      return res.status(500).json({ error: error.message });
+    }
+
+    if (data) {
+      const mappedNode = mapNodeRecord(data);
+      if (mappedNode) {
+        updateNodeCache(mappedNode);
+        io.emit('node-updated', mappedNode);
+        return res.json({ ok: true, node: mappedNode });
+      }
+    }
+
+    return res.status(500).json({ error: 'Failed to map updated node.' });
+  } catch (err) {
+    console.error('Unexpected error updating node resources:', err);
+    return res.status(500).json({ error: 'Unexpected server error.' });
+  }
+
+  if (error) {
+    console.error('Failed to update node resources:', error.message);
+    return res.status(500).json({ error: error.message });
+  }
+
+  if (data) {
+    const mappedNode = mapNodeRecord(data);
+    if (mappedNode) {
+      updateNodeCache(mappedNode);
+      io.emit('node-updated', mappedNode);
+      return res.json({ ok: true, node: mappedNode });
+    }
+  }
+
+  return res.status(500).json({ error: 'Failed to map updated node.' });
 });
 
 app.post('/api/messages', async (req, res) => {

@@ -1,10 +1,26 @@
-import React from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { useResiliNet } from '../context/ResiliNetContext';
 import IslamabadMap from '../components/IslamabadMap';
 import { Switch } from '../components/ui/switch';
-import { Activity, Bed, Droplet, MapPin } from 'lucide-react';
-import { Node } from '../lib/types';
+import { Activity, Bed, Droplet } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
+import { Button } from '../components/ui/button';
+import { Input } from '../components/ui/input';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '../components/ui/dialog';
+
+const DEFAULT_HOSPITAL_RESOURCES = {
+  beds: 0,
+  icu: 0,
+  blood: { 'O+': 0, 'O-': 0, 'A+': 0, 'A-': 0, 'B+': 0, 'B-': 0, 'AB+': 0, 'AB-': 0 },
+  acceptingCases: false,
+};
 
 const bloodBarClass: Record<string, string> = {
   'O+': 'bar-fill-red',
@@ -18,20 +34,76 @@ const bloodBarClass: Record<string, string> = {
 };
 
 export default function HospitalDashboard() {
-  const { nodes, incidents } = useResiliNet();
+  const { nodes, incidents, updateNodeResources, fireEvent } = useResiliNet();
   const { user } = useAuth();
+  const [editOpen, setEditOpen] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
+  const [draft, setDraft] = useState(DEFAULT_HOSPITAL_RESOURCES);
   
   const hospitalNode = nodes.find(n => n.id === user?.node_id);
 
-  // Use the database resources, OR fallback to empty defaults to prevent "Loading..." loop
-  const hospitalResources = hospitalNode?.resources?.hospital || {
-    beds: 0,
-    icu: 0,
-    blood: { 'O+': 0, 'O-': 0, 'A+': 0, 'A-': 0, 'B+': 0, 'B-': 0, 'AB+': 0, 'AB-': 0 },
-    acceptingCases: false
-  };
+  // Normalize database resources with defaults to avoid missing subkeys
+  const hospitalResources = useMemo(() => {
+    const raw = (hospitalNode?.resources?.hospital || {}) as any;
+    return {
+      beds: raw.beds ?? DEFAULT_HOSPITAL_RESOURCES.beds,
+      icu: raw.icu ?? DEFAULT_HOSPITAL_RESOURCES.icu,
+      blood: {
+        'O+': raw.blood?.['O+'] ?? DEFAULT_HOSPITAL_RESOURCES.blood['O+'],
+        'O-': raw.blood?.['O-'] ?? DEFAULT_HOSPITAL_RESOURCES.blood['O-'],
+        'A+': raw.blood?.['A+'] ?? DEFAULT_HOSPITAL_RESOURCES.blood['A+'],
+        'A-': raw.blood?.['A-'] ?? DEFAULT_HOSPITAL_RESOURCES.blood['A-'],
+        'B+': raw.blood?.['B+'] ?? DEFAULT_HOSPITAL_RESOURCES.blood['B+'],
+        'B-': raw.blood?.['B-'] ?? DEFAULT_HOSPITAL_RESOURCES.blood['B-'],
+        'AB+': raw.blood?.['AB+'] ?? DEFAULT_HOSPITAL_RESOURCES.blood['AB+'],
+        'AB-': raw.blood?.['AB-'] ?? DEFAULT_HOSPITAL_RESOURCES.blood['AB-'],
+      },
+      acceptingCases: raw.acceptingCases ?? DEFAULT_HOSPITAL_RESOURCES.acceptingCases,
+    };
+  }, [hospitalNode]);
+
+  useEffect(() => {
+    if (editOpen) {
+      setDraft(hospitalResources);
+    }
+  }, [editOpen, hospitalResources]);
 
   const medicalIncidents = incidents.filter(i => i.type === 'medical' && i.status !== 'resolved');
+
+  const handleTraumaToggle = (acceptingCases: boolean) => {
+    if (!hospitalNode) return;
+
+    updateNodeResources(hospitalNode.id, {
+      hospital: {
+        ...hospitalResources,
+        acceptingCases,
+      },
+    });
+
+    fireEvent(
+      'STATUS_UPDATED',
+      `Hospital ${hospitalNode.id} ${acceptingCases ? 'enabled' : 'disabled'} trauma acceptance`,
+      hospitalNode.id
+    );
+  };
+
+  const handleHospitalSave = async (event: React.FormEvent) => {
+    event.preventDefault();
+    if (!hospitalNode) return;
+
+    setIsSaving(true);
+    try {
+      await updateNodeResources(hospitalNode.id, {
+        hospital: {
+          ...draft,
+        },
+      });
+      fireEvent('STATUS_UPDATED', `Hospital ${hospitalNode.id} updated resource stats`, hospitalNode.id);
+      setEditOpen(false);
+    } finally {
+      setIsSaving(false);
+    }
+  };
 
   // Remove the strict "if (!hospitalResources) return..." line
   if (!hospitalNode) return <div className="p-10 text-white">Connecting to Node: {user?.node_id}...</div>;
@@ -91,12 +163,22 @@ export default function HospitalDashboard() {
             <div className="text-sm font-medium">Accepting Trauma</div>
             <div className="text-[11px] text-muted-foreground">Emergency routing active</div>
           </div>
-          <Switch checked={hospitalResources.acceptingCases} />
+          <Switch checked={hospitalResources.acceptingCases} onCheckedChange={handleTraumaToggle} />
+        </div>
+
+        <div className="glass-card accent-hospital p-4">
+          <div className="space-y-2">
+            <div className="text-sm font-medium">Edit Stats</div>
+            <div className="text-[11px] text-muted-foreground">Update beds, ICU, blood stock, and trauma acceptance.</div>
+          </div>
+          <Button type="button" variant="outline" className="mt-3 w-full border-blue-500/20 bg-blue-500/10 text-blue-100 hover:bg-blue-500/20" onClick={() => setEditOpen(true)}>
+            Open Editor
+          </Button>
         </div>
       </div>
 
       {/* Center - Map */}
-      <div className="col-span-6 flex flex-col">
+      <div className="col-span-9 flex flex-col">
         <div className="glass-card accent-hospital flex-1 p-1.5 overflow-hidden relative">
           <div className="absolute top-3 right-3 z-10 px-3 py-1.5 rounded-md text-[10px] font-mono tracking-widest"
             style={{ background: 'rgba(5, 4, 20, 0.85)', border: '1px solid rgba(59, 130, 246, 0.4)', color: '#93c5fd', boxShadow: '0 0 12px rgba(59, 130, 246, 0.25)' }}>
@@ -106,34 +188,62 @@ export default function HospitalDashboard() {
         </div>
       </div>
 
-      {/* Right Column - Queue */}
-      <div className="col-span-3 flex flex-col">
-        <div className="glass-card accent-hospital flex-1 flex flex-col overflow-hidden">
-          <div className="px-5 py-4 border-b border-blue-500/20 flex items-center justify-between">
-            <span className="label-muted">Medical Triage Queue</span>
-            <span className="severity-pill" style={{ background: 'rgba(59,130,246,0.15)', borderColor: 'rgba(59,130,246,0.5)', color: '#bfdbfe' }}>
-              {medicalIncidents.length} Active
-            </span>
-          </div>
-          <div className="flex-1 overflow-auto p-4 space-y-3">
-            {medicalIncidents.map(inc => (
-              <div key={inc.id} className={`incident-row ${inc.severity}`}>
-                <div className="flex items-start justify-between mb-1.5">
-                  <span className="font-mono text-[10px] text-muted-foreground tracking-wider">{inc.id}</span>
-                  <span className={`severity-pill ${inc.severity}`}>{inc.severity}</span>
-                </div>
-                <div className="text-[13px] font-medium leading-snug">{inc.title}</div>
-                <div className="text-[11px] text-muted-foreground truncate flex items-center gap-1 mt-1.5">
-                  <MapPin className="h-3 w-3" /> {inc.location.address}
-                </div>
+      <Dialog open={editOpen} onOpenChange={setEditOpen}>
+        <DialogContent className="max-h-[85vh] overflow-y-auto border border-blue-500/20 bg-card/95 backdrop-blur-xl sm:max-w-2xl">
+          <form onSubmit={handleHospitalSave} className="space-y-5">
+            <DialogHeader>
+              <DialogTitle>Edit Hospital Stats</DialogTitle>
+              <DialogDescription>
+                Update the resource values shown on the left panel.
+              </DialogDescription>
+            </DialogHeader>
+
+            <div className="grid gap-4 sm:grid-cols-2">
+              <div className="space-y-2">
+                <label className="text-xs uppercase tracking-[0.2em] text-muted-foreground">Beds</label>
+                <Input type="number" min={0} value={draft.beds} onChange={(event) => setDraft(prev => ({ ...prev, beds: Number(event.target.value) }))} className="bg-secondary/50 border-white/10" />
               </div>
-            ))}
-            {medicalIncidents.length === 0 && (
-              <div className="text-center text-muted-foreground text-sm py-8">No active medical incidents</div>
-            )}
-          </div>
-        </div>
-      </div>
+              <div className="space-y-2">
+                <label className="text-xs uppercase tracking-[0.2em] text-muted-foreground">ICU</label>
+                <Input type="number" min={0} value={draft.icu} onChange={(event) => setDraft(prev => ({ ...prev, icu: Number(event.target.value) }))} className="bg-secondary/50 border-white/10" />
+              </div>
+              {Object.keys(draft.blood).map((type) => (
+                <div key={type} className="space-y-2">
+                  <label className="text-xs uppercase tracking-[0.2em] text-muted-foreground">{type} Units</label>
+                  <Input
+                    type="number"
+                    min={0}
+                    value={draft.blood[type as keyof typeof draft.blood]}
+                    onChange={(event) => setDraft(prev => ({
+                      ...prev,
+                      blood: {
+                        ...prev.blood,
+                        [type]: Number(event.target.value),
+                      },
+                    }))}
+                    className="bg-secondary/50 border-white/10"
+                  />
+                </div>
+              ))}
+            </div>
+
+            <label className="flex items-center justify-between gap-3 rounded-lg border border-white/10 bg-black/20 px-4 py-3 text-sm">
+              <span>
+                <span className="block font-medium text-white">Accepting Trauma</span>
+                <span className="block text-xs text-muted-foreground">Enable or disable emergency trauma intake.</span>
+              </span>
+              <Switch checked={draft.acceptingCases} onCheckedChange={(checked) => setDraft(prev => ({ ...prev, acceptingCases: checked }))} />
+            </label>
+
+            <DialogFooter>
+              <Button type="button" variant="outline" onClick={() => setEditOpen(false)} className="border-white/10">Cancel</Button>
+              <Button type="submit" disabled={isSaving} className="bg-blue-500 text-white hover:bg-blue-500/90">
+                {isSaving ? 'Saving...' : 'Save Changes'}
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

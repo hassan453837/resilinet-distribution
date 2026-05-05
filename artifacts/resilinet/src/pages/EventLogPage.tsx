@@ -3,6 +3,7 @@ import { useResiliNet } from '../context/ResiliNetContext';
 import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/card';
 import { Badge } from '../components/ui/badge';
 import { Input } from '../components/ui/input';
+import { Button } from '../components/ui/button';
 import { Search, Filter } from 'lucide-react';
 import { EventType } from '../lib/types';
 
@@ -19,6 +20,11 @@ const getEventColor = (type: EventType) => {
   }
 };
 
+const escapeCsvValue = (value: string) => {
+  const normalized = value.replace(/"/g, '""');
+  return `"${normalized}"`;
+};
+
 export default function EventLogPage() {
   const { events } = useResiliNet();
   const [search, setSearch] = useState('');
@@ -31,6 +37,28 @@ export default function EventLogPage() {
     const matchesType = filterType === 'ALL' || evt.type === filterType;
     return matchesSearch && matchesType;
   });
+
+  const downloadCsv = () => {
+    const header = ['timestamp', 'event_type', 'node_id', 'message'];
+    const rows = events.map(evt => [
+      new Date(evt.timestamp).toISOString(),
+      evt.type,
+      evt.nodeId || '',
+      evt.message,
+    ]);
+
+    const csv = [header, ...rows]
+      .map(row => row.map(value => escapeCsvValue(String(value))).join(','))
+      .join('\r\n');
+
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const anchor = document.createElement('a');
+    anchor.href = url;
+    anchor.download = `event-logs-${new Date().toISOString().slice(0, 19).replace(/[:T]/g, '-')}.csv`;
+    anchor.click();
+    URL.revokeObjectURL(url);
+  };
 
   const eventTypes: (EventType | 'ALL')[] = ['ALL', 'INCIDENT_CREATED', 'NODE_ONLINE', 'NODE_OFFLINE', 'UNIT_DISPATCHED', 'STATUS_UPDATED', 'FAILOVER', 'NODE_RECOVERED'];
 
@@ -59,6 +87,15 @@ export default function EventLogPage() {
                 {type.replace('_', ' ')}
               </Badge>
             ))}
+            <Button
+              type="button"
+              variant="outline"
+              onClick={downloadCsv}
+              className="ml-2 border-cyan-400/20 bg-cyan-400/10 text-cyan-100 hover:bg-cyan-400/20"
+              disabled={events.length === 0}
+            >
+              Download CSV
+            </Button>
           </div>
         </CardContent>
       </Card>

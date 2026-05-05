@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { useLocation } from 'wouter';
 import { useResiliNet } from '../context/ResiliNetContext';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '../components/ui/card';
@@ -6,6 +6,16 @@ import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
 import { Textarea } from '../components/ui/textarea';
 import { Badge } from '../components/ui/badge';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '../components/ui/alert-dialog';
 import { ArrowLeft, MapPin, AlertCircle, Crosshair } from 'lucide-react';
 import { CircleMarker, MapContainer, TileLayer, useMapEvents } from 'react-leaflet';
 import { IncidentType, IncidentSeverity, NodeLocation } from '../lib/types';
@@ -52,6 +62,50 @@ export default function CreateIncidentPage() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [success, setSuccess] = useState(false);
   const [isGeocoding, setIsGeocoding] = useState(false);
+  const [confirmOpen, setConfirmOpen] = useState(false);
+  const [discardOpen, setDiscardOpen] = useState(false);
+
+  const hasUnsavedChanges = useMemo(() => {
+    return Boolean(
+      formData.title.trim() ||
+      formData.description.trim() ||
+      formData.address.trim() ||
+      formData.latitude !== '' ||
+      formData.longitude !== '' ||
+      formData.type !== 'medical' ||
+      formData.severity !== 'moderate'
+    );
+  }, [formData]);
+
+  const goToIncidents = () => {
+    setLocation('/incidents');
+  };
+
+  const requestDiscard = () => {
+    if (hasUnsavedChanges) {
+      setDiscardOpen(true);
+      return;
+    }
+
+    goToIncidents();
+  };
+
+  useEffect(() => {
+    const handleBeforeUnload = (event: BeforeUnloadEvent) => {
+      if (!hasUnsavedChanges) {
+        return;
+      }
+
+      event.preventDefault();
+      event.returnValue = '';
+    };
+
+    window.addEventListener('beforeunload', handleBeforeUnload);
+
+    return () => {
+      window.removeEventListener('beforeunload', handleBeforeUnload);
+    };
+  }, [hasUnsavedChanges]);
 
   const validateForm = (): boolean => {
     const newErrors: Record<string, string> = {};
@@ -66,11 +120,7 @@ export default function CreateIncidentPage() {
     return Object.keys(newErrors).length === 0;
   };
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-
-    if (!validateForm()) return;
-
+  const createIncident = async () => {
     setIsSubmitting(true);
 
     try {
@@ -91,7 +141,8 @@ export default function CreateIncidentPage() {
       });
 
       setSuccess(true);
-      
+      setConfirmOpen(false);
+
       // Reset form
       setFormData({
         title: '',
@@ -113,6 +164,14 @@ export default function CreateIncidentPage() {
     } finally {
       setIsSubmitting(false);
     }
+  };
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+
+    if (!validateForm()) return;
+
+    setConfirmOpen(true);
   };
 
   const handleInputChange = (
@@ -169,7 +228,7 @@ export default function CreateIncidentPage() {
         <Button
           variant="ghost"
           size="icon"
-          onClick={() => setLocation('/incidents')}
+          onClick={requestDiscard}
           className="hover:bg-secondary"
         >
           <ArrowLeft className="w-5 h-5" />
@@ -362,7 +421,7 @@ export default function CreateIncidentPage() {
                 <Button
                   type="button"
                   variant="outline"
-                  onClick={() => setLocation('/incidents')}
+                  onClick={requestDiscard}
                   className="flex-1 border-white/10"
                 >
                   Cancel
@@ -420,6 +479,64 @@ export default function CreateIncidentPage() {
           </CardContent>
         </Card>
       </div>
+
+      <AlertDialog open={confirmOpen} onOpenChange={setConfirmOpen}>
+        <AlertDialogContent className="border border-primary/20 bg-card/95 backdrop-blur-xl">
+          <AlertDialogHeader>
+            <AlertDialogTitle>Confirm incident creation</AlertDialogTitle>
+            <AlertDialogDescription>
+              Review the incident details before submitting it to the system.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+
+          <div className="space-y-2 rounded-lg border border-white/10 bg-black/20 p-4 text-sm text-muted-foreground">
+            <p><span className="font-medium text-foreground">Title:</span> {formData.title}</p>
+            <p><span className="font-medium text-foreground">Type:</span> {formData.type}</p>
+            <p><span className="font-medium text-foreground">Severity:</span> {formData.severity}</p>
+            <p><span className="font-medium text-foreground">Location:</span> {formData.address}</p>
+          </div>
+
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={isSubmitting}>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={(event) => {
+                event.preventDefault();
+                void createIncident();
+              }}
+              disabled={isSubmitting}
+              className="bg-primary text-primary-foreground hover:bg-primary/90"
+            >
+              {isSubmitting ? 'Creating...' : 'Confirm Create'}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      <AlertDialog open={discardOpen} onOpenChange={setDiscardOpen}>
+        <AlertDialogContent className="border border-red-500/20 bg-card/95 backdrop-blur-xl">
+          <AlertDialogHeader>
+            <AlertDialogTitle>Discard incident details?</AlertDialogTitle>
+            <AlertDialogDescription>
+              You have entered incident information. Going back will discard the current form data.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={isSubmitting}>Keep editing</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={(event) => {
+                event.preventDefault();
+                setDiscardOpen(false);
+                goToIncidents();
+              }}
+              disabled={isSubmitting}
+              className="bg-red-500 text-white hover:bg-red-500/90"
+            >
+              Discard changes
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

@@ -13,7 +13,7 @@ export const SEED_NODES: Node[] = [
       hospital: {
         beds: 42,
         icu: 8,
-        blood: { 'O+': 120, 'A+': 45, 'B+': 60, 'AB+': 15 },
+        blood: { 'O+': 120, 'O-': 28, 'A+': 45, 'A-': 18, 'B+': 60, 'B-': 14, 'AB+': 15, 'AB-': 6 },
         acceptingCases: true
       }
     },

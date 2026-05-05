@@ -18,6 +18,7 @@ interface ResiliNetContextType extends ResiliNetState {
   resolveIncident: (id: string, note: string) => void;
   killNode: (id: string) => void;
   recoverNode: (id: string) => void;
+  updateNodeResources: (id: string, resources: Node['resources']) => Promise<void>;
   fireEvent: (type: EventType, message: string, nodeId?: string, incidentId?: string) => void;
   resetSimulation: () => void;
   sendChatMessage: (content: string, recipientId: string | null) => Promise<void>;
@@ -102,6 +103,27 @@ export function ResiliNetProvider({ children }: { children: ReactNode }) {
     }));
     fireEvent('NODE_RECOVERED', `Node ${id} has recovered and rejoined the cluster`, id);
   }, [fireEvent]);
+
+  const updateNodeResources = useCallback(async (id: string, resources: Node['resources']) => {
+    const response = await fetch(`http://localhost:3001/api/nodes/${id}/resources`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ resources }),
+    });
+
+    const payload = await response.json().catch(() => null);
+
+    if (!response.ok) {
+      throw new Error(payload?.error || 'Failed to update node resources.');
+    }
+
+    if (payload?.node) {
+      setState(prev => ({
+        ...prev,
+        nodes: prev.nodes.map(node => node.id === id ? payload.node : node),
+      }));
+    }
+  }, []);
 
   const resetSimulation = useCallback(() => {
     setState({ nodes: [], incidents: SEED_INCIDENTS, events: SEED_EVENTS, messages: [] });
@@ -198,6 +220,14 @@ export function ResiliNetProvider({ children }: { children: ReactNode }) {
         nodes: prev.nodes.map(n =>
           n.id === node.id ? { ...n, ...node, status: 'online', lastHeartbeat: Date.now() } : n
         )
+      }));
+    });
+
+    socket.on('node-updated', (node: Node) => {
+      if (!node?.id) return;
+      setState(prev => ({
+        ...prev,
+        nodes: prev.nodes.map(n => n.id === node.id ? { ...n, ...node } : n)
       }));
     });
 
@@ -298,6 +328,7 @@ export function ResiliNetProvider({ children }: { children: ReactNode }) {
       socket.off('resolve-incident');
       socket.off('node-offline');
       socket.off('node-online');
+      socket.off('node-updated');
       socket.off('tactical-message-init');
       socket.off('tactical-message');
     };
@@ -318,6 +349,7 @@ export function ResiliNetProvider({ children }: { children: ReactNode }) {
       resolveIncident, 
       killNode, 
       recoverNode, 
+      updateNodeResources,
       fireEvent,
       resetSimulation,
       sendChatMessage,

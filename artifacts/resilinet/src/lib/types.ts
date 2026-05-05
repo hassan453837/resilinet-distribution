@@ -16,9 +16,13 @@ export interface NodeResources {
     icu: number;
     blood: {
       'O+': number;
+      'O-': number;
       'A+': number;
+      'A-': number;
       'B+': number;
+      'B-': number;
       'AB+': number;
+      'AB-': number;
     };
     acceptingCases: boolean;
   };

@@ -82,3 +82,21 @@ export interface AppEvent {
   nodeId?: string;
   incidentId?: string;
 }
+
+export type TacticalMessageType = 'broadcast' | 'unicast';
+
+export interface TacticalMessage {
+  id: string;
+  created_at: string;
+  sender_id: string;
+  recipient_id: string | null;
+  content: string;
+  type: TacticalMessageType;
+}
+
+export interface TacticalMessageInput {
+  sender_id: string;
+  recipient_id: string | null;
+  content: string;
+  type: TacticalMessageType;
+}

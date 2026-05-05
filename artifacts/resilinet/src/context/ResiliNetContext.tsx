@@ -1,12 +1,15 @@
-import React, { createContext, useContext, useState, useEffect, ReactNode, useCallback } from 'react';
-import { Node, Incident, AppEvent, EventType, IncidentStatus } from '../lib/types';
+import React, { createContext, useContext, useState, useEffect, ReactNode, useCallback, useMemo, useTransition } from 'react';
+import { Node, Incident, AppEvent, EventType, IncidentStatus, TacticalMessage, TacticalMessageInput } from '../lib/types';
 import { SEED_INCIDENTS, SEED_EVENTS } from '../lib/seed';
 import { socket } from '../lib/socket';
+import { supabase, hasSupabaseConfig } from '../lib/supabase';
+import { useAuth } from './AuthContext';
 
 interface ResiliNetState {
   nodes: Node[];
   incidents: Incident[];
   events: AppEvent[];
+  messages: TacticalMessage[];
 }
 
 interface ResiliNetContextType extends ResiliNetState {
@@ -17,16 +20,27 @@ interface ResiliNetContextType extends ResiliNetState {
   recoverNode: (id: string) => void;
   fireEvent: (type: EventType, message: string, nodeId?: string, incidentId?: string) => void;
   resetSimulation: () => void;
+  sendChatMessage: (content: string, recipientId: string | null) => Promise<void>;
+  chatStatusLabel: string;
+  chatIsLoading: boolean;
+  chatIsSending: boolean;
+  chatError: string | null;
 }
 
 const ResiliNetContext = createContext<ResiliNetContextType | undefined>(undefined);
 
 export function ResiliNetProvider({ children }: { children: ReactNode }) {
+  const { user } = useAuth();
   const [state, setState] = useState<ResiliNetState>({
     nodes: [],
     incidents: [],
-    events: SEED_EVENTS
+    events: SEED_EVENTS,
+    messages: []
   });
+  const [chatIsLoading, setChatIsLoading] = useState(true);
+  const [chatIsSending, setChatIsSending] = useState(false);
+  const [chatError, setChatError] = useState<string | null>(null);
+  const [isPending, startTransition] = useTransition();
 
   const fireEvent = useCallback((type: EventType, message: string, nodeId?: string, incidentId?: string) => {
     const newEvent: AppEvent = {
@@ -90,8 +104,58 @@ export function ResiliNetProvider({ children }: { children: ReactNode }) {
   }, [fireEvent]);
 
   const resetSimulation = useCallback(() => {
-    setState({ nodes: [], incidents: SEED_INCIDENTS, events: SEED_EVENTS });
+    setState({ nodes: [], incidents: SEED_INCIDENTS, events: SEED_EVENTS, messages: [] });
   }, []);
+
+  const localNodeId = user?.node_id;
+
+  const isVisibleToNode = useCallback((message: TacticalMessage, nodeId: string) => {
+    return !message.recipient_id || message.recipient_id === nodeId || message.sender_id === nodeId;
+  }, []);
+
+  const sortMessages = useCallback((messages: TacticalMessage[]) => {
+    return [...messages].sort((left, right) => {
+      return new Date(left.created_at).getTime() - new Date(right.created_at).getTime();
+    });
+  }, []);
+
+  const upsertMessage = useCallback((messages: TacticalMessage[], nextMessage: TacticalMessage) => {
+    const withoutDuplicate = messages.filter(message => message.id !== nextMessage.id);
+    return sortMessages([...withoutDuplicate, nextMessage]);
+  }, [sortMessages]);
+
+  const sendChatMessage = useCallback(async (content: string, recipientId: string | null) => {
+    if (!localNodeId) return;
+
+    setChatIsSending(true);
+    setChatError(null);
+
+    try {
+      const payload: TacticalMessageInput = {
+        sender_id: localNodeId,
+        recipient_id: recipientId,
+        content,
+        type: recipientId ? 'unicast' : 'broadcast',
+      };
+
+      await new Promise<void>((resolve, reject) => {
+        socket.emit('tactical-message', payload, (response: { ok?: boolean; error?: string }) => {
+          if (response?.ok) {
+            resolve();
+            return;
+          }
+
+          const errorMessage = response?.error || 'Failed to send chat message.';
+          reject(new Error(errorMessage));
+        });
+      });
+    } catch (sendError) {
+      const message = sendError instanceof Error ? sendError.message : (sendError as { message?: string })?.message || 'Failed to send chat message.';
+      setChatError(message);
+    } finally {
+      setChatIsSending(false);
+    }
+  }, [isVisibleToNode, localNodeId, startTransition, upsertMessage]);
 
   // Socket.IO real-time sync
   useEffect(() => {
@@ -137,15 +201,114 @@ export function ResiliNetProvider({ children }: { children: ReactNode }) {
       }));
     });
 
+    socket.on('tactical-message-init', (initialMessages: TacticalMessage[]) => {
+      if (!localNodeId || !initialMessages?.length) return;
+
+      const visibleMessages = sortMessages(
+        initialMessages.filter(message => isVisibleToNode(message, localNodeId))
+      );
+
+      startTransition(() => {
+        setState(prev => ({
+          ...prev,
+          messages: sortMessages([...prev.messages, ...visibleMessages])
+        }));
+      });
+    });
+
+    socket.on('tactical-message', (msg: TacticalMessage) => {
+      if (!localNodeId || !isVisibleToNode(msg, localNodeId)) return;
+
+      startTransition(() => {
+        setState(prev => ({
+          ...prev,
+          messages: upsertMessage(prev.messages, msg)
+        }));
+      });
+    });
+
+    const loadAndSubscribeMessages = async () => {
+      const client = supabase;
+
+      if (!hasSupabaseConfig || !client || !localNodeId) {
+        setChatIsLoading(false);
+        return;
+      }
+
+      setChatIsLoading(true);
+      setChatError(null);
+
+      const { data, error } = await client
+        .from('messages')
+        .select('id, created_at, sender_id, recipient_id, content, type')
+        .order('created_at', { ascending: true })
+        .limit(200);
+
+      if (error) {
+        setChatError(error.message);
+        setChatIsLoading(false);
+        return;
+      }
+
+      const visibleMessages = sortMessages(
+        (data ?? []).filter(message => isVisibleToNode(message as TacticalMessage, localNodeId)) as TacticalMessage[]
+      );
+
+      startTransition(() => {
+        setState(prev => ({ ...prev, messages: visibleMessages }));
+      });
+
+      const channel = client
+        .channel('tactical_comms')
+        .on('postgres_changes',
+          { event: 'INSERT', schema: 'public', table: 'messages' },
+          (payload) => {
+            const msg = payload.new as TacticalMessage;
+            if (!isVisibleToNode(msg, localNodeId)) return;
+
+            startTransition(() => {
+              setState(prev => ({
+                ...prev,
+                messages: upsertMessage(prev.messages, msg)
+              }));
+            });
+          }
+        )
+        .subscribe();
+
+      const unsubscribe = () => {
+        client.removeChannel(channel);
+      };
+
+      setChatIsLoading(false);
+
+      return unsubscribe;
+    };
+
+    let cleanupMessages: (() => void) | undefined;
+    loadAndSubscribeMessages().then(cleanup => {
+      cleanupMessages = cleanup;
+    });
+
     return () => {
+      cleanupMessages?.();
       socket.off('init');
       socket.off('init-nodes');
       socket.off('add-incident');
       socket.off('resolve-incident');
       socket.off('node-offline');
       socket.off('node-online');
+      socket.off('tactical-message-init');
+      socket.off('tactical-message');
     };
-  }, []);
+  }, [isVisibleToNode, localNodeId, sortMessages, startTransition, upsertMessage]);
+
+  const chatStatusLabel = useMemo(() => {
+    if (!hasSupabaseConfig) return 'Supabase config missing';
+    if (chatIsLoading) return 'Syncing';
+    if (chatError) return 'Degraded';
+    return 'Live';
+  }, [chatError, chatIsLoading]);
 
   return (
     <ResiliNetContext.Provider value={{ 
@@ -156,7 +319,12 @@ export function ResiliNetProvider({ children }: { children: ReactNode }) {
       killNode, 
       recoverNode, 
       fireEvent,
-      resetSimulation
+      resetSimulation,
+      sendChatMessage,
+      chatStatusLabel,
+      chatIsLoading,
+      chatIsSending,
+      chatError: chatError ?? (isPending ? 'Updating' : null)
     }}>
       {children}
     </ResiliNetContext.Provider>

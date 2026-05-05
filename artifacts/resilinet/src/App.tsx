@@ -25,6 +25,7 @@ import PolicePortal from "./pages/PolicePortal";
 import AnalyticsPage from "./pages/AnalyticsPage";
 import EventLogPage from "./pages/EventLogPage";
 import ConceptsPage from "./pages/ConceptsPage";
+import CommunicationsPage from "./pages/CommunicationsPage";
 
 const queryClient = new QueryClient();
 
@@ -91,6 +92,10 @@ function AppContent() {
 
         <Route path="/events">
           <ProtectedLayout><EventLogPage /></ProtectedLayout>
+        </Route>
+
+        <Route path="/communications">
+          <ProtectedLayout><CommunicationsPage /></ProtectedLayout>
         </Route>
 
         <Route path="/concepts">

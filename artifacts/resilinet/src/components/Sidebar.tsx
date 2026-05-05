@@ -9,6 +9,7 @@ import {
   BarChart3,
   ScrollText,
   Cpu,
+  Radio,
 } from 'lucide-react';
 
 export function Sidebar() {
@@ -32,12 +33,13 @@ export function Sidebar() {
     { href: `/${role}`, icon: Activity, label: `${role?.charAt(0).toUpperCase()}${role?.slice(1)} Portal` },
     { href: '/analytics', icon: BarChart3, label: 'Analytics' },
     { href: '/events', icon: ScrollText, label: 'Event Log' },
+    { href: '/communications', icon: Radio, label: 'Tactical Comms' },
     { href: '/concepts', icon: Cpu, label: 'PDC Concepts' },
   ];
 
   return (
     <aside className="sidebar-surface w-[68px] hover:w-[230px] transition-all duration-300 ease-in-out fixed left-0 top-28 bottom-0 z-40 flex flex-col group overflow-hidden">
-      <nav className="flex-1 py-6 flex flex-col gap-1.5 px-2.5">
+      <nav className="flex-1 min-h-0 overflow-y-auto py-6 flex flex-col gap-1.5 px-2.5 pr-1">
         {navItems.map((item) => {
           const isActive = location === item.href;
           return (
@@ -76,7 +78,7 @@ export function Sidebar() {
         })}
       </nav>
 
-      <div className="p-4 border-t border-violet-500/15">
+      <div className="shrink-0 p-4 border-t border-violet-500/15 bg-[rgba(5,4,20,0.88)] backdrop-blur-sm">
         <div className="flex items-center gap-2 justify-center group-hover:justify-start">
           <div className="flex gap-1">
             <span className="h-1.5 w-1.5 rounded-full live-pulse" style={{ background: '#3b82f6', boxShadow: '0 0 6px #3b82f6' }} />
